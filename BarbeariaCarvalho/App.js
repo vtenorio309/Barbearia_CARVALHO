@@ -11,27 +11,33 @@ import XLSX from 'xlsx';
 
 function AdminHomeScreen() {
   const [service, setService] = useState('');
+  const [price, setPrice] = useState('');
+  const [duration, setDuration] = useState('');
   const [barber, setBarber] = useState('');
   const [servicesList, setServicesList] = useState([]);
   const [barbersList, setBarbersList] = useState([]);
-  
-  useEffect(() => {
-  const loadData = async () => {
-    try {
-      const services = await AsyncStorage.getItem('services');
-      const barbers = await AsyncStorage.getItem('barbers');
-      if (services) setServicesList(JSON.parse(services));
-      if (barbers) setBarbersList(JSON.parse(barbers));
-    } catch (e) {
-      console.error("Erro ao carregar dados", e);
-    }
-  };
-  loadData();
-}, []);
+  const [morningHours, setMorningHours] = useState(''); // Horário de funcionamento da manhã
+  const [afternoonHours, setAfternoonHours] = useState(''); // Horário de funcionamento da tarde
+  const [eveningHours, setEveningHours] = useState(''); // Horário de funcionamento da noite
 
-
-  // Carregar dados ao iniciar
   useEffect(() => {
+    const loadData = async () => {
+      try {
+        const services = await AsyncStorage.getItem('services');
+        const barbers = await AsyncStorage.getItem('barbers');
+        const hours = await AsyncStorage.getItem('workingHours');
+        if (services) setServicesList(JSON.parse(services));
+        if (barbers) setBarbersList(JSON.parse(barbers));
+        if (hours) {
+          const { morning, afternoon, evening } = JSON.parse(hours);
+          setMorningHours(morning);
+          setAfternoonHours(afternoon);
+          setEveningHours(evening);
+        }
+      } catch (e) {
+        console.error("Erro ao carregar dados", e);
+      }
+    };
     loadData();
   }, []);
 
@@ -40,29 +46,24 @@ function AdminHomeScreen() {
     try {
       await AsyncStorage.setItem('services', JSON.stringify(servicesList));
       await AsyncStorage.setItem('barbers', JSON.stringify(barbersList));
+      const workingHours = { morning: morningHours, afternoon: afternoonHours, evening: eveningHours };
+      await AsyncStorage.setItem('workingHours', JSON.stringify(workingHours));
     } catch (e) {
       console.error("Erro ao salvar dados", e);
     }
   };
 
-  // Carregar os dados salvos
-  const loadData = async () => {
-    try {
-      const services = await AsyncStorage.getItem('services');
-      const barbers = await AsyncStorage.getItem('barbers');
-      if (services) setServicesList(JSON.parse(services));
-      if (barbers) setBarbersList(JSON.parse(barbers));
-    } catch (e) {
-      console.error("Erro ao carregar dados", e);
-    }
-  };
-
   // Adicionar serviço
   const addService = () => {
-    if (service) {
-      setServicesList([...servicesList, service]);
+    if (service && price && duration) {
+      const newService = { name: service, price, duration };
+      setServicesList([...servicesList, newService]);
       setService('');
+      setPrice('');
+      setDuration('');
       saveData();
+    } else {
+      Alert.alert('Erro', 'Preencha todos os campos do serviço');
     }
   };
 
@@ -112,15 +113,31 @@ function AdminHomeScreen() {
       {/* Adicionar Serviço */}
       <TextInput
         style={styles.input}
-        placeholder="Adicionar Serviço"
+        placeholder="Nome do Serviço"
         value={service}
         onChangeText={setService}
       />
+      <TextInput
+        style={styles.input}
+        placeholder="Preço do Serviço"
+        keyboardType="numeric"
+        value={price}
+        onChangeText={setPrice}
+      />
+      <TextInput
+        style={styles.input}
+        placeholder="Duração (minutos)"
+        keyboardType="numeric"
+        value={duration}
+        onChangeText={setDuration}
+      />
+      
       <Button title="Adicionar Serviço" onPress={addService} />
+      
       <Text style={styles.subtitle}>Serviços</Text>
       {servicesList.map((service, index) => (
         <View key={index} style={styles.listItem}>
-          <Text>{service}</Text>
+          <Text>{service.name} - R${service.price} - {service.duration} min</Text>
           <Button title="Remover" onPress={() => removeService(index)} />
         </View>
       ))}
@@ -133,6 +150,7 @@ function AdminHomeScreen() {
         onChangeText={setBarber}
       />
       <Button title="Adicionar Barbeiro" onPress={addBarber} />
+      
       <Text style={styles.subtitle}>Barbeiros</Text>
       {barbersList.map((barber, index) => (
         <View key={index} style={styles.listItem}>
@@ -140,6 +158,30 @@ function AdminHomeScreen() {
           <Button title="Remover" onPress={() => removeBarber(index)} />
         </View>
       ))}
+
+      {/* Horário de Funcionamento */}
+      <Text style={styles.subtitle}>Horários de Funcionamento</Text>
+      
+      <TextInput
+        style={styles.input}
+        placeholder="Horário da Manhã (Ex: 7:30-12:00)"
+        value={morningHours}
+        onChangeText={setMorningHours}
+      />
+      <TextInput
+        style={styles.input}
+        placeholder="Horário da Tarde (Ex: 13:00-17:30)"
+        value={afternoonHours}
+        onChangeText={setAfternoonHours}
+      />
+      <TextInput
+        style={styles.input}
+        placeholder="Horário da Noite (Ex: 18:00-21:00)"
+        value={eveningHours}
+        onChangeText={setEveningHours}
+      />
+      
+      <Button title="Salvar Horários" onPress={saveData} />
     </ScrollView>
   );
 }
@@ -155,7 +197,6 @@ const AdminReportScreen = () => {
   }, []);
 
   const loadDataFromExcel = async () => {
-    // Caminho do arquivo Excel (precisa ser o caminho salvo no app)
     const pathToFile = `${FileSystem.documentDirectory}relatorio_servicos.xlsx`;
 
     try {
@@ -167,7 +208,6 @@ const AdminReportScreen = () => {
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
       const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
-      // Atualizar o estado com os dados do Excel
       setReportData(jsonData);
     } catch (error) {
       console.error('Erro ao carregar arquivo Excel:', error);
@@ -179,8 +219,8 @@ const AdminReportScreen = () => {
     if (!reportData) return [];
     return reportData.filter(item => {
       const itemDate = new Date(item.Horario); // A coluna "Horario" no arquivo Excel
-      const month = itemDate.getMonth() + 1; // Mês do item (0-indexado)
-      const year = itemDate.getFullYear();   // Ano do item
+      const month = itemDate.getMonth() + 1;   // Mês do item (0-indexado)
+      const year = itemDate.getFullYear();     // Ano do item
       return (month === parseInt(selectedMonth) && year === parseInt(selectedYear));
     });
   };
@@ -322,29 +362,11 @@ function UserHomeScreen() {
   const [selectedService, setSelectedService] = useState('');
   const [selectedBarber, setSelectedBarber] = useState('');
   const [selectedPeriod, setSelectedPeriod] = useState('');
-  const [queue, setQueue] = useState([]); // Fila de espera
-  const [currentAppointmentIndex, setCurrentAppointmentIndex] = useState(0); // Controla a fila
-
-  // Função para adicionar um agendamento
-  const handleSchedule = () => {
-    if (clientName && selectedService && selectedBarber && selectedPeriod) {
-      const newAppointment = {
-        clientName,
-        service: selectedService,
-        barber: selectedBarber,
-        period: selectedPeriod,
-        time: new Date().toLocaleTimeString(), // Hora atual como exemplo
-      };
-      setAppointments([...appointments, newAppointment]);
-      setQueue([...queue, newAppointment]);
-      // Limpa os campos após agendamento
-      setClientName('');
-      setSelectedService('');
-      setSelectedBarber('');
-      setSelectedPeriod('');
-    }
-  };
-
+  const [queue, setQueue] = useState([]);
+  const [servicesList, setServicesList] = useState([]);
+  const [barbersList, setBarbersList] = useState([]);
+  const [periods, setPeriods] = useState(['Manhã', 'Tarde', 'Noite']); // Exemplo de períodos
+  
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -357,9 +379,26 @@ function UserHomeScreen() {
       }
     };
     loadData();
-  }, []);  
+  }, []);
 
-  // Função para remover um agendamento com confirmação
+  const handleSchedule = () => {
+    if (clientName && selectedService && selectedBarber && selectedPeriod) {
+      const newAppointment = {
+        clientName,
+        service: selectedService,
+        barber: selectedBarber,
+        period: selectedPeriod,
+        time: new Date().toLocaleTimeString(),
+      };
+      setAppointments([...appointments, newAppointment]);
+      setQueue([...queue, newAppointment]);
+      setClientName('');
+      setSelectedService('');
+      setSelectedBarber('');
+      setSelectedPeriod('');
+    }
+  };
+
   const handleRemoveAppointment = (index) => {
     Alert.alert('Confirmação', 'Você tem certeza que deseja remover este agendamento?', [
       { text: 'Cancelar', style: 'cancel' },
@@ -373,28 +412,23 @@ function UserHomeScreen() {
     ]);
   };
 
-  // Função para passar a vez na fila
   const handlePassQueue = () => {
     if (queue.length > 1) {
       setQueue((prevQueue) => {
         const updatedQueue = [...prevQueue];
-        const passedClient = updatedQueue.shift(); // Remove o primeiro da fila
-        updatedQueue.push(passedClient); // Coloca no final
+        const passedClient = updatedQueue.shift();
+        updatedQueue.push(passedClient);
         return updatedQueue;
       });
     }
   };
 
-  // Função para concluir o serviço
   const handleCompleteAppointment = (index) => {
     const completedAppointment = appointments[index];
-    // Salva no arquivo Excel (essa parte será conectada depois com o armazenamento real)
     saveAppointmentToExcel(completedAppointment);
-    // Remove o agendamento da lista
     setAppointments(appointments.filter((_, i) => i !== index));
   };
 
-  // Função para salvar no Excel (exemplo)
   const saveAppointmentToExcel = (appointment) => {
     const data = `
       Nome: ${appointment.clientName},
@@ -429,9 +463,9 @@ function UserHomeScreen() {
         onValueChange={(itemValue) => setSelectedService(itemValue)}
       >
         <Picker.Item label="Selecione o Serviço" value="" />
-        <Picker.Item label="Corte Masculino" value="Corte Masculino" />
-        <Picker.Item label="Barba" value="Barba" />
-        <Picker.Item label="Corte + Barba" value="Corte + Barba" />
+        {servicesList.map((service, index) => (
+          <Picker.Item key={index} label={service} value={service} />
+        ))}
       </Picker>
 
       {/* Selecionar barbeiro */}
@@ -441,9 +475,9 @@ function UserHomeScreen() {
         onValueChange={(itemValue) => setSelectedBarber(itemValue)}
       >
         <Picker.Item label="Selecione o Barbeiro" value="" />
-        <Picker.Item label="João" value="João" />
-        <Picker.Item label="Carlos" value="Carlos" />
-        <Picker.Item label="Lucas" value="Lucas" />
+        {barbersList.map((barber, index) => (
+          <Picker.Item key={index} label={barber} value={barber} />
+        ))}
       </Picker>
 
       {/* Selecionar período */}
@@ -453,9 +487,9 @@ function UserHomeScreen() {
         onValueChange={(itemValue) => setSelectedPeriod(itemValue)}
       >
         <Picker.Item label="Selecione o Período" value="" />
-        <Picker.Item label="Manhã" value="Manhã" />
-        <Picker.Item label="Tarde" value="Tarde" />
-        <Picker.Item label="Noite" value="Noite" />
+        {periods.map((period, index) => (
+          <Picker.Item key={index} label={period} value={period} />
+        ))}
       </Picker>
 
       {/* Botão para marcar */}
@@ -540,45 +574,131 @@ export default function App() {
 
 // Estilos CSS
 const styles = StyleSheet.create({
+  // Estilo geral da aplicação
   container: {
     flex: 1,
-    padding: 20,
-    backgroundColor: '#fff',
+    backgroundColor: '#f5f5f5',
+    padding: 16,
   },
+  
+  // Títulos principais
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
-    marginBottom: 20,
+    color: '#333',
+    marginBottom: 16,
+    textAlign: 'center',
   },
-  input: {
-    height: 40,
-    borderColor: 'gray',
-    borderWidth: 1,
-    marginBottom: 10,
-    paddingHorizontal: 10,
+
+  // Subtítulos (usado para pequenos títulos ou descrições)
+  subtitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#555',
+    marginBottom: 8,
   },
+
+  // Campo de seleção de data (mês e ano)
   picker: {
     height: 50,
     width: '100%',
-    marginBottom: 10,
+    borderColor: '#ccc',
+    borderWidth: 1,
+    borderRadius: 5,
+    marginBottom: 12,
+    backgroundColor: '#fff',
   },
-  listItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+
+  // Botão para gerar relatórios
+  button: {
+    backgroundColor: '#3498db',
+    padding: 12,
+    borderRadius: 5,
     alignItems: 'center',
-    marginBottom: 10,
+    marginTop: 12,
   },
+  buttonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+
+  // Estilos dos títulos de gráficos
+  chartTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#444',
+    marginTop: 20,
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+
+  // Estilos dos gráficos
   chart: {
     marginVertical: 10,
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    padding: 10,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
-  chartTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 10,
+
+  // Estilo para listagem de informações (UserHomeScreen)
+  listItem: {
+    backgroundColor: '#fff',
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  subtitle: {
+  listItemText: {
+    fontSize: 16,
+    color: '#333',
+  },
+  
+  // Estilo para o campo de nome do cliente
+  inputField: {
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 5,
+    padding: 10,
+    backgroundColor: '#fff',
+    marginBottom: 12,
+  },
+
+  // Estilos para relatórios e gráficos
+  reportSection: {
+    marginTop: 20,
+    paddingHorizontal: 16,
+    backgroundColor: '#f9f9f9',
+    borderRadius: 10,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  reportText: {
     fontSize: 18,
-    fontWeight: 'bold',
-    marginVertical: 10,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
   },
 });
