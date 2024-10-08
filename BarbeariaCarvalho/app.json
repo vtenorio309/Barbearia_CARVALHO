@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "BarbeariaCarvalho",
-    "slug": "barbeariacarvalho",
+    "slug": "BarbeariaCarvalho",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -18,17 +18,10 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      },
-      "package": "com.franklinper.b.barbeariacarvalho"
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    },
-    "extra": {
-      "eas": {
-        "projectId": "f8c67d0c-05f5-4d19-9447-80e350892f69"
-      }
-    },
-    "owner": "franklinper.b"
+    }
   }
 }
