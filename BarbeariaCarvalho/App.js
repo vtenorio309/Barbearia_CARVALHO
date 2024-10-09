@@ -258,8 +258,10 @@ const AdminReportScreen = () => {
   // Renderizar gráficos com base nos dados
   const renderCharts = () => {
     const chartsData = generateChartsData();
-
-    if (!chartsData) return null;
+  
+    if (!chartsData || !chartsData.clientes || !chartsData.faturamento) {
+      return <Text>Não há dados suficientes para gerar gráficos.</Text>;
+    }
 
     return (
       <View>
@@ -372,24 +374,46 @@ function UserHomeScreen() {
       try {
         const services = await AsyncStorage.getItem('services');
         const barbers = await AsyncStorage.getItem('barbers');
+        const hours = await AsyncStorage.getItem('workingHours');
         if (services) setServicesList(JSON.parse(services));
         if (barbers) setBarbersList(JSON.parse(barbers));
+        if (hours) {
+          const { morning, afternoon, evening } = JSON.parse(hours);
+          setPeriods([`Manhã: ${morning}`, `Tarde: ${afternoon}`, `Noite: ${evening}`]);
+        }
       } catch (e) {
         console.error("Erro ao carregar dados", e);
       }
     };
     loadData();
   }, []);
-
+  
   const handleSchedule = () => {
     if (clientName && selectedService && selectedBarber && selectedPeriod) {
+      const periodHours = {
+        'Manhã': morningHours,
+        'Tarde': afternoonHours,
+        'Noite': eveningHours,
+      };
+  
+      const [start, end] = periodHours[selectedPeriod].split('-');
+      let nextAvailableTime = start;
+  
+      if (queue.length > 0) {
+        const lastAppointment = queue[queue.length - 1];
+        const serviceDuration = servicesList.find(service => service.name === selectedService).duration;
+        // Calcular o próximo horário disponível
+        nextAvailableTime = calculateNextAvailableTime(lastAppointment.time, serviceDuration);
+      }
+  
       const newAppointment = {
         clientName,
         service: selectedService,
         barber: selectedBarber,
         period: selectedPeriod,
-        time: new Date().toLocaleTimeString(),
+        time: nextAvailableTime,
       };
+  
       setAppointments([...appointments, newAppointment]);
       setQueue([...queue, newAppointment]);
       setClientName('');
@@ -398,6 +422,20 @@ function UserHomeScreen() {
       setSelectedPeriod('');
     }
   };
+
+  const calculateNextAvailableTime = (lastTime, duration) => {
+    const [hours, minutes] = lastTime.split(':').map(Number);
+    let nextMinutes = minutes + parseInt(duration);
+    let nextHours = hours;
+  
+    if (nextMinutes >= 60) {
+      nextHours += Math.floor(nextMinutes / 60);
+      nextMinutes = nextMinutes % 60;
+    }
+  
+    return `${nextHours}:${nextMinutes < 10 ? '0' : ''}${nextMinutes}`;
+  };
+  
 
   const handleRemoveAppointment = (index) => {
     Alert.alert('Confirmação', 'Você tem certeza que deseja remover este agendamento?', [
@@ -464,11 +502,10 @@ function UserHomeScreen() {
       >
         <Picker.Item label="Selecione o Serviço" value="" />
         {servicesList.map((service, index) => (
-          <Picker.Item key={index} label={service} value={service} />
+          <Picker.Item key={index} label={service.name} value={service.name} />
         ))}
       </Picker>
 
-      {/* Selecionar barbeiro */}
       <Picker
         selectedValue={selectedBarber}
         style={styles.picker}
@@ -479,6 +516,7 @@ function UserHomeScreen() {
           <Picker.Item key={index} label={barber} value={barber} />
         ))}
       </Picker>
+
 
       {/* Selecionar período */}
       <Picker
