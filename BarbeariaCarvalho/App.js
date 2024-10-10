@@ -367,8 +367,10 @@ function UserHomeScreen() {
   const [queue, setQueue] = useState([]);
   const [servicesList, setServicesList] = useState([]);
   const [barbersList, setBarbersList] = useState([]);
-  const [periods, setPeriods] = useState(['Manhã', 'Tarde', 'Noite']); // Exemplo de períodos
-  
+  const [periods, setPeriods] = useState(['Manhã', 'Tarde', 'Noite']);
+  const [day, setDay] = useState('');
+  const [month, setMonth] = useState('');
+
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -387,55 +389,63 @@ function UserHomeScreen() {
     };
     loadData();
   }, []);
-  
+
+  const calculateNextAvailableTime = (lastTime, duration) => {
+    const [hours, minutes] = lastTime.split(':').map(Number);
+    let nextMinutes = minutes + parseInt(duration);
+    let nextHours = hours;
+
+    if (nextMinutes >= 60) {
+      nextHours += Math.floor(nextMinutes / 60);
+      nextMinutes = nextMinutes % 60;
+    }
+
+    return `${nextHours}:${nextMinutes < 10 ? '0' : ''}${nextMinutes}`;
+  };
+
   const handleSchedule = () => {
-    if (clientName && selectedService && selectedBarber && selectedPeriod) {
+    if (clientName && selectedService && selectedBarber && selectedPeriod && day && month) {
       const periodHours = {
-        'Manhã': morningHours,
-        'Tarde': afternoonHours,
-        'Noite': eveningHours,
+        'Manhã': periods[0].split(': ')[1],
+        'Tarde': periods[1].split(': ')[1],
+        'Noite': periods[2].split(': ')[1],
       };
-  
+
+      const currentYear = new Date().getFullYear();
+      const appointmentDate = `${day}/${month}/${currentYear}`;
       const [start, end] = periodHours[selectedPeriod].split('-');
       let nextAvailableTime = start;
-  
+
       if (queue.length > 0) {
         const lastAppointment = queue[queue.length - 1];
         const serviceDuration = servicesList.find(service => service.name === selectedService).duration;
-        // Calcular o próximo horário disponível
         nextAvailableTime = calculateNextAvailableTime(lastAppointment.time, serviceDuration);
+
+        if (nextAvailableTime > end) {
+          alert('Não é possível agendar, o horário disponível excede o limite do período.');
+          return;
+        }
       }
-  
+
       const newAppointment = {
         clientName,
         service: selectedService,
         barber: selectedBarber,
         period: selectedPeriod,
         time: nextAvailableTime,
+        date: appointmentDate,
       };
-  
+
       setAppointments([...appointments, newAppointment]);
       setQueue([...queue, newAppointment]);
       setClientName('');
       setSelectedService('');
       setSelectedBarber('');
       setSelectedPeriod('');
+      setDay('');
+      setMonth('');
     }
   };
-
-  const calculateNextAvailableTime = (lastTime, duration) => {
-    const [hours, minutes] = lastTime.split(':').map(Number);
-    let nextMinutes = minutes + parseInt(duration);
-    let nextHours = hours;
-  
-    if (nextMinutes >= 60) {
-      nextHours += Math.floor(nextMinutes / 60);
-      nextMinutes = nextMinutes % 60;
-    }
-  
-    return `${nextHours}:${nextMinutes < 10 ? '0' : ''}${nextMinutes}`;
-  };
-  
 
   const handleRemoveAppointment = (index) => {
     Alert.alert('Confirmação', 'Você tem certeza que deseja remover este agendamento?', [
@@ -463,30 +473,30 @@ function UserHomeScreen() {
 
   const handleCompleteAppointment = (index) => {
     const completedAppointment = appointments[index];
-    saveAppointmentToExcel(completedAppointment);
-    setAppointments(appointments.filter((_, i) => i !== index));
-  };
+    const { clientName, service, barber, period, date } = completedAppointment;
+    const price = servicesList.find(s => s.name === service)?.price || 0;
 
-  const saveAppointmentToExcel = (appointment) => {
     const data = `
-      Nome: ${appointment.clientName},
-      Serviço: ${appointment.service},
-      Barbeiro: ${appointment.barber},
-      Período: ${appointment.period},
-      Horário: ${appointment.time}\n`;
+      Nome: ${clientName},
+      Serviço: ${service},
+      Barbeiro: ${barber},
+      Período: ${period},
+      Data: ${date},
+      Preço: R$${price}\n`;
 
     FileSystem.writeAsStringAsync(FileSystem.documentDirectory + 'appointments.csv', data, {
       encoding: FileSystem.EncodingType.UTF8,
     })
       .then(() => alert('Serviço concluído e salvo com sucesso!'))
       .catch((err) => console.log(err));
+
+    setAppointments(appointments.filter((_, i) => i !== index));
   };
 
   return (
     <ScrollView style={styles.container}>
       <Text style={styles.title}>Agendamentos</Text>
 
-      {/* Campo para nome do cliente */}
       <TextInput
         style={styles.input}
         placeholder="Nome do Cliente"
@@ -494,7 +504,6 @@ function UserHomeScreen() {
         onChangeText={setClientName}
       />
 
-      {/* Selecionar serviço */}
       <Picker
         selectedValue={selectedService}
         style={styles.picker}
@@ -517,8 +526,6 @@ function UserHomeScreen() {
         ))}
       </Picker>
 
-
-      {/* Selecionar período */}
       <Picker
         selectedValue={selectedPeriod}
         style={styles.picker}
@@ -530,12 +537,31 @@ function UserHomeScreen() {
         ))}
       </Picker>
 
-      {/* Botão para marcar */}
+      <TextInput
+        style={styles.input}
+        placeholder="Dia (Ex: 12)"
+        keyboardType="numeric"
+        value={day}
+        onChangeText={setDay}
+      />
+
+      <Picker
+        selectedValue={month}
+        style={styles.picker}
+        onValueChange={(itemValue) => setMonth(itemValue)}
+      >
+        <Picker.Item label="Selecione o Mês" value="" />
+        <Picker.Item label="Janeiro" value="1" />
+        <Picker.Item label="Fevereiro" value="2" />
+        <Picker.Item label="Março" value="3" />
+        <Picker.Item label="Abril" value="4" />
+        {/* Adicionar mais meses */}
+      </Picker>
+
       <TouchableOpacity style={styles.button} onPress={handleSchedule}>
         <Text style={styles.buttonText}>Marcar</Text>
       </TouchableOpacity>
 
-      {/* Exibir agendamentos */}
       <Text style={styles.subtitle}>Agendamentos</Text>
       {appointments.map((appointment, index) => (
         <View key={index} style={styles.appointment}>
@@ -551,6 +577,7 @@ function UserHomeScreen() {
     </ScrollView>
   );
 }
+
 
 const Tab = createBottomTabNavigator();
 
