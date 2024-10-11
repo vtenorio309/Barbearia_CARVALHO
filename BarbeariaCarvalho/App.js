@@ -159,28 +159,59 @@ function AdminHomeScreen() {
         </View>
       ))}
 
-      {/* Horário de Funcionamento */}
-      <Text style={styles.subtitle}>Horários de Funcionamento</Text>
-      
+    <Text style={styles.subtitle}>Horários de Funcionamento</Text>
+
+    {/* Definir horário da manhã */}
+    <View style={styles.periodContainer}>
+      <Text style={styles.periodTitle}>Manhã</Text>
       <TextInput
         style={styles.input}
-        placeholder="Horário da Manhã (Ex: 7:30-12:00)"
-        value={morningHours}
-        onChangeText={setMorningHours}
+        placeholder="Horário Inicial (Ex: 7:30)"
+        value={morningHours.start}
+        onChangeText={(text) => setMorningHours({ ...morningHours, start: text })}
       />
       <TextInput
         style={styles.input}
-        placeholder="Horário da Tarde (Ex: 13:00-17:30)"
-        value={afternoonHours}
-        onChangeText={setAfternoonHours}
+        placeholder="Horário Final (Ex: 12:00)"
+        value={morningHours.end}
+        onChangeText={(text) => setMorningHours({ ...morningHours, end: text })}
+      />
+    </View>
+
+    {/* Definir horário da tarde */}
+    <View style={styles.periodContainer}>
+      <Text style={styles.periodTitle}>Tarde</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="Horário Inicial (Ex: 13:00)"
+        value={afternoonHours.start}
+        onChangeText={(text) => setAfternoonHours({ ...afternoonHours, start: text })}
       />
       <TextInput
         style={styles.input}
-        placeholder="Horário da Noite (Ex: 18:00-21:00)"
-        value={eveningHours}
-        onChangeText={setEveningHours}
+        placeholder="Horário Final (Ex: 17:30)"
+        value={afternoonHours.end}
+        onChangeText={(text) => setAfternoonHours({ ...afternoonHours, end: text })}
       />
-      
+    </View>
+
+    {/* Definir horário da noite */}
+    <View style={styles.periodContainer}>
+      <Text style={styles.periodTitle}>Noite</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="Horário Inicial (Ex: 18:00)"
+        value={eveningHours.start}
+        onChangeText={(text) => setEveningHours({ ...eveningHours, start: text })}
+      />
+      <TextInput
+        style={styles.input}
+        placeholder="Horário Final (Ex: 21:00)"
+        value={eveningHours.end}
+        onChangeText={(text) => setEveningHours({ ...eveningHours, end: text })}
+      />
+    </View>
+
       <Button title="Salvar Horários" onPress={saveData} />
     </ScrollView>
   );
@@ -394,39 +425,44 @@ function UserHomeScreen() {
     const [hours, minutes] = lastTime.split(':').map(Number);
     let nextMinutes = minutes + parseInt(duration);
     let nextHours = hours;
-
+  
     if (nextMinutes >= 60) {
       nextHours += Math.floor(nextMinutes / 60);
       nextMinutes = nextMinutes % 60;
     }
-
+  
     return `${nextHours}:${nextMinutes < 10 ? '0' : ''}${nextMinutes}`;
-  };
+  };  
 
   const handleSchedule = () => {
     if (clientName && selectedService && selectedBarber && selectedPeriod && day && month) {
+      const currentYear = new Date().getFullYear();
+      const appointmentDate = `${day}/${month}/${currentYear}`;
+      
+      // Define os horários de início e fim para o período selecionado
       const periodHours = {
         'Manhã': periods[0].split(': ')[1],
         'Tarde': periods[1].split(': ')[1],
         'Noite': periods[2].split(': ')[1],
       };
-
-      const currentYear = new Date().getFullYear();
-      const appointmentDate = `${day}/${month}/${currentYear}`;
+      
       const [start, end] = periodHours[selectedPeriod].split('-');
       let nextAvailableTime = start;
-
+  
+      // Calcula o próximo horário disponível baseado nos agendamentos anteriores
       if (queue.length > 0) {
         const lastAppointment = queue[queue.length - 1];
         const serviceDuration = servicesList.find(service => service.name === selectedService).duration;
         nextAvailableTime = calculateNextAvailableTime(lastAppointment.time, serviceDuration);
-
+        
+        // Verifica se o próximo horário disponível ultrapassa o limite do período
         if (nextAvailableTime > end) {
           alert('Não é possível agendar, o horário disponível excede o limite do período.');
           return;
         }
       }
-
+  
+      // Cria o novo agendamento com o horário disponível
       const newAppointment = {
         clientName,
         service: selectedService,
@@ -435,7 +471,8 @@ function UserHomeScreen() {
         time: nextAvailableTime,
         date: appointmentDate,
       };
-
+  
+      // Atualiza os estados e limpa os campos
       setAppointments([...appointments, newAppointment]);
       setQueue([...queue, newAppointment]);
       setClientName('');
@@ -444,8 +481,13 @@ function UserHomeScreen() {
       setSelectedPeriod('');
       setDay('');
       setMonth('');
+    } else {
+      alert("Por favor, preencha todos os campos antes de marcar.");
     }
   };
+  
+  
+  
 
   const handleRemoveAppointment = (index) => {
     Alert.alert('Confirmação', 'Você tem certeza que deseja remover este agendamento?', [
