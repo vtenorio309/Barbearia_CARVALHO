@@ -474,52 +474,57 @@ function UserHomeScreen() {
       }
       return prevMonth - 1;
     });
-  };
-
-  const calculateNextAvailableTime = (lastTime, duration) => {
-    const [hours, minutes] = lastTime.split(':').map(Number);
-    let nextMinutes = minutes + parseInt(duration);
-    let nextHours = hours;
-  
-    if (nextMinutes >= 60) {
-      nextHours += Math.floor(nextMinutes / 60);
-      nextMinutes = nextMinutes % 60;
-    }
-  
-    return `${nextHours}:${nextMinutes < 10 ? '0' : ''}${nextMinutes}`;
-  };  
+  }; 
 
   const handleSchedule = () => {
     if (clientName && selectedService && selectedBarber && selectedPeriod && day && month) {
-      const currentYear = new Date().getFullYear();
+      const currentYear = year; // Usando o ano selecionado
       const appointmentDate = `${day}/${month}/${currentYear}`;
       
-      // Define os horários de início e fim para o período selecionado
-      const periodHours = {
-        'Manhã': `${periods[0]?.start}-${periods[0]?.end}`,
-        'Tarde': `${periods[1]?.start}-${periods[1]?.end}`,
-        'Noite': `${periods[2]?.start}-${periods[2]?.end}`,
-      };      
-      console.log(periods); // Verifique como os períodos estão sendo formatados
-            
+      // Obtém o período selecionado (Manhã, Tarde, Noite) e seus horários de início e fim
+      const selectedPeriodDetails = periods.find(p => p.label === selectedPeriod);
+      if (!selectedPeriodDetails) {
+        alert('Período inválido!');
+        return;
+      }
+      const { start, end } = selectedPeriodDetails;
       
-      const [start, end] = periodHours[selectedPeriod].split('-');
       let nextAvailableTime = start;
   
-      // Calcula o próximo horário disponível baseado nos agendamentos anteriores
-      if (queue.length > 0) {
-        const lastAppointment = queue[queue.length - 1];
-        const serviceDuration = servicesList.find(service => service.name === selectedService).duration;
+      // Calcula a duração do serviço selecionado
+      const service = servicesList.find(service => service.name === selectedService);
+      if (!service) {
+        alert('Serviço inválido!');
+        return;
+      }
+      const serviceDuration = parseInt(service.duration); // Duração em minutos
+      
+      // Verifica os agendamentos no mesmo dia, mês e período
+      const appointmentsForDay = queue.filter(appointment => 
+        appointment.date === appointmentDate && appointment.period === selectedPeriod
+      );
+      
+      if (appointmentsForDay.length > 0) {
+        // Se houver agendamentos no mesmo dia e período, pega o último agendamento
+        const lastAppointment = appointmentsForDay[appointmentsForDay.length - 1];
         nextAvailableTime = calculateNextAvailableTime(lastAppointment.time, serviceDuration);
         
-        // Verifica se o próximo horário disponível ultrapassa o limite do período
+        // Verifica se o próximo horário disponível ultrapassa o fim do período
         if (nextAvailableTime > end) {
           alert('Não é possível agendar, o horário disponível excede o limite do período.');
           return;
         }
       }
   
-      // Cria o novo agendamento com o horário disponível
+      // Verifica se há tempo suficiente até o final do período para o próximo agendamento
+      const periodEndTime = convertToMinutes(end);
+      const nextAvailableTimeInMinutes = convertToMinutes(nextAvailableTime);
+      if (nextAvailableTimeInMinutes + serviceDuration > periodEndTime) {
+        alert('Não há tempo suficiente neste período para este serviço.');
+        return;
+      }
+  
+      // Cria o novo agendamento com o horário calculado
       const newAppointment = {
         clientName,
         service: selectedService,
@@ -537,20 +542,28 @@ function UserHomeScreen() {
       setSelectedBarber('');
       setSelectedPeriod('');
       setDay('');
-      setMonth('');
-    } else {
-      alert("Por favor, preencha todos os campos antes de marcar.");
-    }
-    if (clientName && selectedService && selectedBarber && selectedPeriod && day && month) {
-      const appointmentDate = `${day}/${month}/${year}`;
-      // A lógica do agendamento continua aqui...
     } else {
       alert("Por favor, preencha todos os campos antes de marcar.");
     }
   };
   
+  const calculateNextAvailableTime = (lastTime, duration) => {
+    const [hours, minutes] = lastTime.split(':').map(Number);
+    let nextMinutes = minutes + parseInt(duration);
+    let nextHours = hours;
   
+    if (nextMinutes >= 60) {
+      nextHours += Math.floor(nextMinutes / 60);
+      nextMinutes = nextMinutes % 60;
+    }
   
+    return `${nextHours}:${nextMinutes < 10 ? '0' : ''}${nextMinutes}`;
+  }; 
+
+  const convertToMinutes = (time) => {
+    const [hours, minutes] = time.split(':').map(Number);
+    return hours * 60 + minutes;
+  };
 
   const handleRemoveAppointment = (index) => {
     Alert.alert('Confirmação', 'Você tem certeza que deseja remover este agendamento?', [
