@@ -400,26 +400,81 @@ function UserHomeScreen() {
   const [barbersList, setBarbersList] = useState([]);
   const [periods, setPeriods] = useState(['Manhã', 'Tarde', 'Noite']);
   const [day, setDay] = useState('');
-  const [month, setMonth] = useState('');
+  const [month, setMonth] = useState(new Date().getMonth() + 1); // Mês atual
+  const [year, setYear] = useState(new Date().getFullYear()); // Ano atual
 
+  useEffect(() => {
+    // Limita o número de dias com base no mês e ano selecionados
+    const maxDays = daysInMonth(month, year);
+    if (day > maxDays) {
+      setDay(maxDays.toString()); // Ajusta o dia automaticamente
+    }
+  }, [month, year, day]);
+  
   useEffect(() => {
     const loadData = async () => {
       try {
         const services = await AsyncStorage.getItem('services');
         const barbers = await AsyncStorage.getItem('barbers');
         const hours = await AsyncStorage.getItem('workingHours');
+    
         if (services) setServicesList(JSON.parse(services));
         if (barbers) setBarbersList(JSON.parse(barbers));
         if (hours) {
           const { morning, afternoon, evening } = JSON.parse(hours);
-          setPeriods([`Manhã: ${morning}`, `Tarde: ${afternoon}`, `Noite: ${evening}`]);
+          setPeriods([
+            { label: 'Manhã', start: morning.start, end: morning.end },
+            { label: 'Tarde', start: afternoon.start, end: afternoon.end },
+            { label: 'Noite', start: evening.start, end: evening.end },
+          ]);
+        }  
+        if (services) {
+          setServicesList(JSON.parse(services));
         }
+  
+        if (barbers) {
+          setBarbersList(JSON.parse(barbers));
+        }
+  
+        if (hours) {
+          const { morning, afternoon, evening } = JSON.parse(hours);
+          setPeriods([
+            { label: 'Manhã', start: morning.start, end: morning.end },
+            { label: 'Tarde', start: afternoon.start, end: afternoon.end },
+            { label: 'Noite', start: evening.start, end: evening.end },
+          ]);
+        }        
       } catch (e) {
         console.error("Erro ao carregar dados", e);
       }
     };
+  
     loadData();
-  }, []);
+  }, []);  
+
+  const daysInMonth = (month, year) => {
+    return new Date(year, month, 0).getDate(); // Retorna o número de dias no mês
+  };
+
+  const handleNextMonth = () => {
+    setMonth((prevMonth) => {
+      if (prevMonth === 12) {
+        setYear(year + 1); // Incrementa o ano quando passar de dezembro
+        return 1; // Vai para janeiro
+      }
+      return prevMonth + 1;
+    });
+  };
+
+  const handlePreviousMonth = () => {
+    setMonth((prevMonth) => {
+      if (prevMonth === 1) {
+        setYear(year - 1); // Decrementa o ano quando passar de janeiro
+        return 12; // Vai para dezembro
+      }
+      return prevMonth - 1;
+    });
+  };
 
   const calculateNextAvailableTime = (lastTime, duration) => {
     const [hours, minutes] = lastTime.split(':').map(Number);
@@ -441,10 +496,12 @@ function UserHomeScreen() {
       
       // Define os horários de início e fim para o período selecionado
       const periodHours = {
-        'Manhã': periods[0].split(': ')[1],
-        'Tarde': periods[1].split(': ')[1],
-        'Noite': periods[2].split(': ')[1],
-      };
+        'Manhã': `${periods[0]?.start}-${periods[0]?.end}`,
+        'Tarde': `${periods[1]?.start}-${periods[1]?.end}`,
+        'Noite': `${periods[2]?.start}-${periods[2]?.end}`,
+      };      
+      console.log(periods); // Verifique como os períodos estão sendo formatados
+            
       
       const [start, end] = periodHours[selectedPeriod].split('-');
       let nextAvailableTime = start;
@@ -481,6 +538,12 @@ function UserHomeScreen() {
       setSelectedPeriod('');
       setDay('');
       setMonth('');
+    } else {
+      alert("Por favor, preencha todos os campos antes de marcar.");
+    }
+    if (clientName && selectedService && selectedBarber && selectedPeriod && day && month) {
+      const appointmentDate = `${day}/${month}/${year}`;
+      // A lógica do agendamento continua aqui...
     } else {
       alert("Por favor, preencha todos os campos antes de marcar.");
     }
@@ -575,30 +638,31 @@ function UserHomeScreen() {
       >
         <Picker.Item label="Selecione o Período" value="" />
         {periods.map((period, index) => (
-          <Picker.Item key={index} label={period} value={period} />
+          <Picker.Item
+            key={index}
+            label={`${period.label}: ${period.start} - ${period.end}`}
+            value={period.label}
+          />
         ))}
       </Picker>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Dia (Ex: 12)"
-        keyboardType="numeric"
-        value={day}
-        onChangeText={setDay}
-      />
 
-      <Picker
-        selectedValue={month}
-        style={styles.picker}
-        onValueChange={(itemValue) => setMonth(itemValue)}
-      >
-        <Picker.Item label="Selecione o Mês" value="" />
-        <Picker.Item label="Janeiro" value="1" />
-        <Picker.Item label="Fevereiro" value="2" />
-        <Picker.Item label="Março" value="3" />
-        <Picker.Item label="Abril" value="4" />
-        {/* Adicionar mais meses */}
-      </Picker>
+      <View style={styles.datePickerContainer}>
+        <TextInput
+          style={styles.input}
+          placeholder="Dia"
+          keyboardType="numeric"
+          value={day}
+          onChangeText={(value) => setDay(value)}
+          maxLength={2}
+        />
+        <Text style={styles.dateText}>{`/ ${month} / ${year}`}</Text>
+
+        <View style={styles.monthNav}>
+          <Button title="◄" onPress={handlePreviousMonth} />
+          <Button title="►" onPress={handleNextMonth} />
+        </View>
+      </View>
 
       <TouchableOpacity style={styles.button} onPress={handleSchedule}>
         <Text style={styles.buttonText}>Marcar</Text>
