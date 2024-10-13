@@ -401,7 +401,7 @@ function UserHomeScreen() {
   const [periods, setPeriods] = useState(['Manhã', 'Tarde', 'Noite']);
   const [day, setDay] = useState('');
   const [month, setMonth] = useState(new Date().getMonth() + 1); // Mês atual
-  const [year, setYear] = useState(new Date().getFullYear()); // Ano atual
+  const [year, setYear] = useState(new Date().getFullYear()); // Ano atual  
 
   useEffect(() => {
     // Limita o número de dias com base no mês e ano selecionados
@@ -510,7 +510,7 @@ function UserHomeScreen() {
         nextAvailableTime = calculateNextAvailableTime(lastAppointment.time, serviceDuration);
         
         // Verifica se o próximo horário disponível ultrapassa o fim do período
-        if (nextAvailableTime > end) {
+        if (convertToMinutes(nextAvailableTime) + serviceDuration > convertToMinutes(end)) {
           alert('Não é possível agendar, o horário disponível excede o limite do período.');
           return;
         }
@@ -535,8 +535,9 @@ function UserHomeScreen() {
       };
   
       // Atualiza os estados e limpa os campos
+      const updatedQueue = sortQueue([...queue, newAppointment]);
+      setQueue(updatedQueue);
       setAppointments([...appointments, newAppointment]);
-      setQueue([...queue, newAppointment]);
       setClientName('');
       setSelectedService('');
       setSelectedBarber('');
@@ -546,24 +547,7 @@ function UserHomeScreen() {
       alert("Por favor, preencha todos os campos antes de marcar.");
     }
   };
-  
-  const calculateNextAvailableTime = (lastTime, duration) => {
-    const [hours, minutes] = lastTime.split(':').map(Number);
-    let nextMinutes = minutes + parseInt(duration);
-    let nextHours = hours;
-  
-    if (nextMinutes >= 60) {
-      nextHours += Math.floor(nextMinutes / 60);
-      nextMinutes = nextMinutes % 60;
-    }
-  
-    return `${nextHours}:${nextMinutes < 10 ? '0' : ''}${nextMinutes}`;
-  }; 
 
-  const convertToMinutes = (time) => {
-    const [hours, minutes] = time.split(':').map(Number);
-    return hours * 60 + minutes;
-  };
 
   const handleRemoveAppointment = (index) => {
     Alert.alert('Confirmação', 'Você tem certeza que deseja remover este agendamento?', [
@@ -578,15 +562,73 @@ function UserHomeScreen() {
     ]);
   };
 
+  const sortQueue = (queue) => {
+    return [...queue].sort((a, b) => {
+      // Extrai dia, mês e ano para cada agendamento
+      const [dayA, monthA, yearA] = a.date.split('/');
+      const [dayB, monthB, yearB] = b.date.split('/');
+  
+      // Cria objetos Date para comparação
+      const dateA = new Date(yearA, monthA - 1, dayA, ...a.time.split(':').map(Number));
+      const dateB = new Date(yearB, monthB - 1, dayB, ...b.time.split(':').map(Number));
+  
+      if (dateA < dateB) return -1;
+      if (dateA > dateB) return 1;
+  
+      // Ordena por período se as datas forem iguais
+      const periodOrder = { 'Manhã': 1, 'Tarde': 2, 'Noite': 3 };
+      return periodOrder[a.period] - periodOrder[b.period];
+    });
+  };
+  
+
+  // Função para passar a vez
   const handlePassQueue = () => {
     if (queue.length > 1) {
       setQueue((prevQueue) => {
-        const updatedQueue = [...prevQueue];
-        const passedClient = updatedQueue.shift();
-        updatedQueue.push(passedClient);
-        return updatedQueue;
+        const newQueue = [...prevQueue];
+        
+        // Pega o primeiro e o segundo cliente na fila
+        const firstClient = { ...newQueue[0] };
+        const secondClient = { ...newQueue[1] };
+  
+        // O primeiro cliente assume o horário do segundo
+        firstClient.time = secondClient.time;
+  
+        // O segundo cliente assume o horário do primeiro
+        secondClient.time = calculateNextAvailableTime(secondClient.time, parseInt(firstClient.service.duration));
+  
+        // Atualiza a fila com os novos horários
+        newQueue[0] = firstClient;
+        newQueue[1] = secondClient;
+  
+        // Reordena a fila para manter a ordem correta
+        return sortQueue(newQueue);
       });
+    } else {
+      alert('Não há mais clientes na fila para passar a vez.');
     }
+  };
+
+  // Função para converter um horário (HH:mm) em minutos
+  const convertToMinutes = (time) => {
+    const [hours, minutes] = time.split(':').map(Number);
+    return hours * 60 + minutes;
+  };
+
+  // Função para calcular o próximo horário disponível com base no último horário e duração do serviço
+  const calculateNextAvailableTime = (lastTime, duration) => {
+    const [hours, minutes] = lastTime.split(':').map(Number);
+    let totalMinutes = hours * 60 + minutes + duration;
+
+    let nextHours = Math.floor(totalMinutes / 60);
+    let nextMinutes = totalMinutes % 60;
+
+    // Formata o horário para "HH:MM"
+    const formattedHours = nextHours < 10 ? `0${nextHours}` : `${nextHours}`;
+    const formattedMinutes = nextMinutes < 10 ? `0${nextMinutes}` : `${nextMinutes}`;
+
+    return `${formattedHours}:${formattedMinutes}`;
   };
 
   const handleCompleteAppointment = (index) => {
