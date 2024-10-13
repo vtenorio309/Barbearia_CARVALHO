@@ -6,10 +6,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { View, Text, TextInput, Button, TouchableOpacity, ScrollView, StyleSheet, Alert} from 'react-native';
 import { LineChart, BarChart } from 'react-native-chart-kit'; // Para os gráficos
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as FileSystem from 'expo-file-system'; 
+import * as FileSystem from 'expo-file-system';
+import * as MediaLibrary from 'expo-media-library';
 import XLSX from 'xlsx';
 
 function AdminHomeScreen() {
+  const [isSaving, setIsSaving] = useState(false);
   const [service, setService] = useState('');
   const [price, setPrice] = useState('');
   const [duration, setDuration] = useState('');
@@ -40,6 +42,25 @@ function AdminHomeScreen() {
     };
     loadData();
   }, []);
+
+  // Função para solicitar permissão de arquivos 
+  const askForPermission = async () => {
+    if (Platform.OS === 'android' || Platform.OS === 'ios') {
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permissão necessária', 'Você precisa permitir acesso aos arquivos para gerar o BD.');
+        return false;
+      }
+      return true;
+    }
+    return true;
+  };
+
+  // Exemplo de serviços concluídos (remover futuramente)
+  const completedServices = [
+    { name: 'João', day: 12, month: 10, year: 2024, period: 'Manhã', service: 'Corte', barber: 'Carlos', price: 30 },
+    { name: 'Maria', day: 13, month: 10, year: 2024, period: 'Tarde', service: 'Barba', barber: 'Pedro', price: 20 },
+  ];
 
   // Função para salvar dados localmente
   const saveData = async () => {
@@ -105,6 +126,47 @@ function AdminHomeScreen() {
       },
     ]);
   };
+
+    // Função para gerar o arquivo CSV (só e para gerar o arquivo com o cabeçalho e não para colocar os dados)
+    const generateCSVFile = async () => {
+      if (await askForPermission()) {
+        try {
+          setIsSaving(true);
+  
+          // Cabeçalhos do CSV
+          const csvHeader = 'Nome,Dia,Mês,Ano,Período,Serviço,Barbeiro,Preço\n';
+          
+          // Dados dos serviços concluídos
+          const csvRows = completedServices
+            .map(service => 
+              `${service.name},${service.day},${service.month},${service.year},${service.period},${service.service},${service.barber},${service.price}`
+            )
+            .join('\n');
+          
+          // Conteúdo completo do arquivo CSV
+          const csvContent = csvHeader + csvRows;
+          
+          // Diretório e nome do arquivo
+          const directory = FileSystem.documentDirectory + 'CompletedServices.csv';
+          
+          // Grava o arquivo
+          await FileSystem.writeAsStringAsync(directory, csvContent, { encoding: FileSystem.EncodingType.UTF8 });
+          
+          // Salva o arquivo na galeria (Android e iOS)
+          if (Platform.OS === 'android' || Platform.OS === 'ios') {
+            const asset = await MediaLibrary.createAssetAsync(directory);
+            await MediaLibrary.createAlbumAsync('Download', asset, false);
+          }
+  
+          Alert.alert('Sucesso', 'Arquivo CSV gerado com sucesso em seus documentos.');
+        } catch (error) {
+          Alert.alert('Erro', 'Ocorreu um erro ao gerar o arquivo CSV.');
+          console.error(error);
+        } finally {
+          setIsSaving(false);
+        }
+      }
+    };
 
   return (
     <ScrollView style={styles.container}>
@@ -213,8 +275,10 @@ function AdminHomeScreen() {
     </View>
 
       <Button title="Salvar Horários" onPress={saveData} />
+
+      <Button title={isSaving ? "Salvando..." : "Gerar CSV"} onPress={generateCSVFile} disabled={isSaving} />
     </ScrollView>
-  );
+  );  
 }
 
 // === AdminReportScreen ===
@@ -547,7 +611,20 @@ function UserHomeScreen() {
       alert("Por favor, preencha todos os campos antes de marcar.");
     }
   };
+  
+  // Função para calcular o próximo horário disponível com base no último horário e duração do serviço
+  const calculateNextAvailableTime = (lastTime, duration) => {
+    const [hours, minutes] = lastTime.split(':').map(Number);
+    let nextMinutes = minutes + parseInt(duration);
+    let nextHours = hours;
 
+    if (nextMinutes >= 60) {
+      nextHours += Math.floor(nextMinutes / 60);
+      nextMinutes = nextMinutes % 60;
+    }
+
+    return `${nextHours}:${nextMinutes < 10 ? '0' : ''}${nextMinutes}`;
+  };
 
   const handleRemoveAppointment = (index) => {
     Alert.alert('Confirmação', 'Você tem certeza que deseja remover este agendamento?', [
@@ -614,21 +691,6 @@ function UserHomeScreen() {
   const convertToMinutes = (time) => {
     const [hours, minutes] = time.split(':').map(Number);
     return hours * 60 + minutes;
-  };
-
-  // Função para calcular o próximo horário disponível com base no último horário e duração do serviço
-  const calculateNextAvailableTime = (lastTime, duration) => {
-    const [hours, minutes] = lastTime.split(':').map(Number);
-    let totalMinutes = hours * 60 + minutes + duration;
-
-    let nextHours = Math.floor(totalMinutes / 60);
-    let nextMinutes = totalMinutes % 60;
-
-    // Formata o horário para "HH:MM"
-    const formattedHours = nextHours < 10 ? `0${nextHours}` : `${nextHours}`;
-    const formattedMinutes = nextMinutes < 10 ? `0${nextMinutes}` : `${nextMinutes}`;
-
-    return `${formattedHours}:${formattedMinutes}`;
   };
 
   const handleCompleteAppointment = (index) => {
