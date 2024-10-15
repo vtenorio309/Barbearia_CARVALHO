@@ -2,7 +2,7 @@
   "expo": {
     "name": "barbeariacarvalho",
     "slug": "barbeariacarvalho",
-    "version": "1.1.2",
+    "version": "1.1.8",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -15,6 +15,10 @@
       "supportsTablet": true
     },
     "android": {
+      "permissions": [
+        "WRITE_EXTERNAL_STORAGE",
+        "READ_EXTERNAL_STORAGE"
+      ],      
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
