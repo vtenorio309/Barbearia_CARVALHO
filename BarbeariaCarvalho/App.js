@@ -3,7 +3,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { NavigationContainer } from '@react-navigation/native';
 import { Picker } from '@react-native-picker/picker';
 import { Ionicons } from '@expo/vector-icons';
-import { View, Text, TextInput, Button, TouchableOpacity, ScrollView, StyleSheet, Alert, PermissionsAndroid, Platform} from 'react-native';
+import { View, Text, TextInput, Button, TouchableOpacity, ScrollView, StyleSheet, Alert} from 'react-native';
 import { LineChart, BarChart } from 'react-native-chart-kit'; // Para os gráficos
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system';
