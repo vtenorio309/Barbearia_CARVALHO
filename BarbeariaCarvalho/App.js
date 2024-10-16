@@ -388,6 +388,9 @@ const AdminReportScreen = () => {
   );
 };
 
+const dbAppointments = SQLite.openDatabase('appointments.db');
+const dbCompletedServices = SQLite.openDatabase('completedServices.db');
+
 // Tela de agendamentos para usuários
 function UserHomeScreen() {
   const [clientName, setClientName] = useState('');
@@ -448,9 +451,62 @@ function UserHomeScreen() {
         console.error("Erro ao carregar dados", e);
       }
     };
-  
+
+    createTables();
+
+  dbAppointments.transaction(tx => {
+    tx.executeSql(`SELECT * FROM appointments`, [], (_txObj, { rows: { _array } }) => {
+      setAppointments(_array);
+      setQueue(sortQueue(_array));
+    });
+  });
+
+  dbCompletedServices.transaction(tx => {
+    tx.executeSql(`SELECT * FROM completedServices`, [], (_txObj, { rows: { _array } }) => {
+      console.log('Serviços concluídos:', _array);
+    });
+  });
+
     loadData();
   }, []);  
+
+  // Função para criar as tabelas
+  const createTables = () => {
+    // Tabela de agendamentos (appointments)
+    dbAppointments.transaction(tx => {
+      tx.executeSql(
+        `CREATE TABLE IF NOT EXISTS appointments (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          clientName TEXT,   // Nome do cliente
+          day INTEGER,       // Dia do agendamento
+          month INTEGER,     // Mês do agendamento
+          year INTEGER,      // Ano do agendamento
+          period TEXT,       // Período (Manhã, Tarde, Noite)
+          service TEXT,      // Serviço agendado
+          barber TEXT,       // Nome do barbeiro
+          price REAL         // Preço do serviço
+        );`
+      );
+    });
+
+    // Tabela de serviços concluídos (completedServices)
+    dbCompletedServices.transaction(tx => {
+      tx.executeSql(
+        `CREATE TABLE IF NOT EXISTS completedServices (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          clientName TEXT,   // Nome do cliente
+          day INTEGER,       // Dia do serviço
+          month INTEGER,     // Mês do serviço
+          year INTEGER,      // Ano do serviço
+          period TEXT,       // Período (Manhã, Tarde, Noite)
+          service TEXT,      // Serviço concluído
+          barber TEXT,       // Nome do barbeiro
+          price REAL         // Preço do serviço
+        );`
+      );
+    });
+  };
+
 
   const daysInMonth = (month, year) => {
     return new Date(year, month, 0).getDate(); // Retorna o número de dias no mês
@@ -533,6 +589,20 @@ function UserHomeScreen() {
         time: nextAvailableTime,
         date: appointmentDate,
       };
+
+      // Salva o agendamento no banco de dados
+    dbAppointments.transaction(tx => {
+      tx.executeSql(
+        `INSERT INTO appointments (clientName, service, barber, period, time, date)
+        VALUES (?, ?, ?, ?, ?, ?)`,
+        [clientName, selectedService, selectedBarber, selectedPeriod, nextAvailableTime, appointmentDate],
+        (_txObj, resultSet) => {
+          setAppointments([...appointments, { id: resultSet.insertId, ...newAppointment }]);
+          setQueue(sortQueue([...queue, newAppointment]));
+        },
+        (_txObj, error) => console.error('Erro ao adicionar agendamento', error)
+      );
+    });
   
       // Atualiza os estados e limpa os campos
       const updatedQueue = sortQueue([...queue, newAppointment]);
@@ -563,17 +633,29 @@ function UserHomeScreen() {
   };
 
   const handleRemoveAppointment = (index) => {
+    const appointmentToRemove = appointments[index];
+  
     Alert.alert('Confirmação', 'Você tem certeza que deseja remover este agendamento?', [
       { text: 'Cancelar', style: 'cancel' },
       {
         text: 'Remover',
         onPress: () => {
-          setAppointments(appointments.filter((_, i) => i !== index));
-          setQueue(queue.filter((_, i) => i !== index));
+          dbAppointments.transaction(tx => {
+            tx.executeSql(
+              `DELETE FROM appointments WHERE id = ?`,
+              [appointmentToRemove.id],
+              () => {
+                setAppointments(appointments.filter((_, i) => i !== index));
+                setQueue(queue.filter((_, i) => i !== index));
+              },
+              (_txObj, error) => console.error('Erro ao remover agendamento', error)
+            );
+          });
         },
       },
     ]);
   };
+  
 
   const sortQueue = (queue) => {
     return [...queue].sort((a, b) => {
@@ -632,24 +714,30 @@ function UserHomeScreen() {
   const handleCompleteAppointment = (index) => {
     const completedAppointment = appointments[index];
     const { clientName, service, barber, period, date } = completedAppointment;
+    
+    // Desmembrando a data no formato DD/MM/YYYY
+    const [day, month, year] = date.split('/');
+
+    // Buscando o preço do serviço
     const price = servicesList.find(s => s.name === service)?.price || 0;
 
-    const data = `
-      Nome: ${clientName},
-      Serviço: ${service},
-      Barbeiro: ${barber},
-      Período: ${period},
-      Data: ${date},
-      Preço: R$${price}\n`;
-
-    FileSystem.writeAsStringAsync(FileSystem.documentDirectory + 'appointments.csv', data, {
-      encoding: FileSystem.EncodingType.UTF8,
-    })
-      .then(() => alert('Serviço concluído e salvo com sucesso!'))
-      .catch((err) => console.log(err));
-
-    setAppointments(appointments.filter((_, i) => i !== index));
+    // Inserindo os dados no banco de dados de serviços concluídos
+    dbCompletedServices.transaction(tx => {
+      tx.executeSql(
+        `INSERT INTO completedServices (clientName, day, month, year, period, service, barber, price)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [clientName, day, month, year, period, service, barber, price],
+        () => {
+          alert('Serviço concluído e salvo com sucesso!');
+          // Remover o agendamento da lista
+          setAppointments(appointments.filter((_, i) => i !== index));
+        },
+        (_txObj, error) => console.error('Erro ao concluir serviço', error)
+      );
+    });
   };
+
+  
 
   return (
     <ScrollView style={styles.container}>
