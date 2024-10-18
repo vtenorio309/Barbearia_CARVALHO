@@ -388,11 +388,21 @@ const AdminReportScreen = () => {
   );
 };
 
-const dbAppointments = SQLite.openDatabase('appointments.db');
-const dbCompletedServices = SQLite.openDatabase('completedServices.db');
+const openDatabaseAsync = async () => {
+  return new Promise(async (resolve, reject) => {
+    const db = await SQLite.openDatabaseAsync('barbearia.db', null, null, null, (error) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve(db);
+      }
+    });
+  });
+};
 
 // Tela de agendamentos para usuários
 function UserHomeScreen() {
+  const [db, setDb] = useState(null);
   const [clientName, setClientName] = useState('');
   const [appointments, setAppointments] = useState([]);
   const [selectedService, setSelectedService] = useState('');
@@ -404,7 +414,7 @@ function UserHomeScreen() {
   const [periods, setPeriods] = useState(['Manhã', 'Tarde', 'Noite']);
   const [day, setDay] = useState('');
   const [month, setMonth] = useState(new Date().getMonth() + 1); // Mês atual
-  const [year, setYear] = useState(new Date().getFullYear()); // Ano atual  
+  const [year, setYear] = useState(new Date().getFullYear()); // Ano atual
 
   useEffect(() => {
     // Limita o número de dias com base no mês e ano selecionados
@@ -415,8 +425,22 @@ function UserHomeScreen() {
   }, [month, year, day]);
   
   useEffect(() => {
+    const setupDatabase = async () => {
+      try {
+        const database = await openDatabaseAsync();
+        setDb(database);
+        createTables(database);
+        loadAppointments(database);
+      } catch (error) {
+        console.error("Erro ao abrir o banco de dados", error);
+      }
+    };
+
+    setupDatabase();
+    // Carregar serviços, barbeiros e horários
     const loadData = async () => {
       try {
+        // Carregar serviços, barbeiros e horários
         const services = await AsyncStorage.getItem('services');
         const barbers = await AsyncStorage.getItem('barbers');
         const hours = await AsyncStorage.getItem('workingHours');
@@ -431,82 +455,41 @@ function UserHomeScreen() {
             { label: 'Noite', start: evening.start, end: evening.end },
           ]);
         }  
-        if (services) {
-          setServicesList(JSON.parse(services));
-        }
-  
-        if (barbers) {
-          setBarbersList(JSON.parse(barbers));
-        }
-  
-        if (hours) {
-          const { morning, afternoon, evening } = JSON.parse(hours);
-          setPeriods([
-            { label: 'Manhã', start: morning.start, end: morning.end },
-            { label: 'Tarde', start: afternoon.start, end: afternoon.end },
-            { label: 'Noite', start: evening.start, end: evening.end },
-          ]);
-        }        
       } catch (e) {
         console.error("Erro ao carregar dados", e);
       }
     };
-
-    createTables();
-
-  dbAppointments.transaction(tx => {
-    tx.executeSql(`SELECT * FROM appointments`, [], (_txObj, { rows: { _array } }) => {
-      setAppointments(_array);
-      setQueue(sortQueue(_array));
-    });
-  });
-
-  dbCompletedServices.transaction(tx => {
-    tx.executeSql(`SELECT * FROM completedServices`, [], (_txObj, { rows: { _array } }) => {
-      console.log('Serviços concluídos:', _array);
-    });
-  });
-
     loadData();
-  }, []);  
+  }, []);
 
-  // Função para criar as tabelas
-  const createTables = () => {
-    // Tabela de agendamentos (appointments)
-    dbAppointments.transaction(tx => {
+  // Função para criar as tabelas (apenas uma tabela)
+  const createTables = (database) => {
+    database.transaction(tx => {
       tx.executeSql(
         `CREATE TABLE IF NOT EXISTS appointments (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
-          clientName TEXT,   // Nome do cliente
-          day INTEGER,       // Dia do agendamento
-          month INTEGER,     // Mês do agendamento
-          year INTEGER,      // Ano do agendamento
-          period TEXT,       // Período (Manhã, Tarde, Noite)
-          service TEXT,      // Serviço agendado
-          barber TEXT,       // Nome do barbeiro
-          price REAL         // Preço do serviço
-        );`
-      );
-    });
-
-    // Tabela de serviços concluídos (completedServices)
-    dbCompletedServices.transaction(tx => {
-      tx.executeSql(
-        `CREATE TABLE IF NOT EXISTS completedServices (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          clientName TEXT,   // Nome do cliente
-          day INTEGER,       // Dia do serviço
-          month INTEGER,     // Mês do serviço
-          year INTEGER,      // Ano do serviço
-          period TEXT,       // Período (Manhã, Tarde, Noite)
-          service TEXT,      // Serviço concluído
-          barber TEXT,       // Nome do barbeiro
-          price REAL         // Preço do serviço
+          clientName TEXT,
+          day INTEGER,
+          month INTEGER,
+          year INTEGER,
+          period TEXT,
+          service TEXT,
+          barber TEXT,
+          price REAL,
+          concluido BOOLEAN DEFAULT 0
         );`
       );
     });
   };
 
+  const loadAppointments = (database) => {
+    database.transaction(tx => {
+      tx.executeSql(`SELECT * FROM appointments`, [], (_txObj, { rows: { _array } }) => {
+        setAppointments(_array);
+        setQueue(sortQueue(_array));
+      });
+    });
+  };
 
   const daysInMonth = (month, year) => {
     return new Date(year, month, 0).getDate(); // Retorna o número de dias no mês
@@ -537,7 +520,7 @@ function UserHomeScreen() {
       const currentYear = year; // Usando o ano selecionado
       const appointmentDate = `${day}/${month}/${currentYear}`;
       
-      // Obtém o período selecionado (Manhã, Tarde, Noite) e seus horários de início e fim
+      // Obtém o período selecionado (Manhã, Tarde, Noite)
       const selectedPeriodDetails = periods.find(p => p.label === selectedPeriod);
       if (!selectedPeriodDetails) {
         alert('Período inválido!');
@@ -547,40 +530,34 @@ function UserHomeScreen() {
       
       let nextAvailableTime = start;
   
-      // Calcula a duração do serviço selecionado
       const service = servicesList.find(service => service.name === selectedService);
       if (!service) {
         alert('Serviço inválido!');
         return;
       }
       const serviceDuration = parseInt(service.duration); // Duração em minutos
-      
-      // Verifica os agendamentos no mesmo dia, mês e período
+
       const appointmentsForDay = queue.filter(appointment => 
         appointment.date === appointmentDate && appointment.period === selectedPeriod
       );
       
       if (appointmentsForDay.length > 0) {
-        // Se houver agendamentos no mesmo dia e período, pega o último agendamento
         const lastAppointment = appointmentsForDay[appointmentsForDay.length - 1];
         nextAvailableTime = calculateNextAvailableTime(lastAppointment.time, serviceDuration);
         
-        // Verifica se o próximo horário disponível ultrapassa o fim do período
         if (convertToMinutes(nextAvailableTime) + serviceDuration > convertToMinutes(end)) {
           alert('Não é possível agendar, o horário disponível excede o limite do período.');
           return;
         }
       }
   
-      // Verifica se há tempo suficiente até o final do período para o próximo agendamento
       const periodEndTime = convertToMinutes(end);
       const nextAvailableTimeInMinutes = convertToMinutes(nextAvailableTime);
       if (nextAvailableTimeInMinutes + serviceDuration > periodEndTime) {
         alert('Não há tempo suficiente neste período para este serviço.');
         return;
       }
-  
-      // Cria o novo agendamento com o horário calculado
+
       const newAppointment = {
         clientName,
         service: selectedService,
@@ -588,26 +565,24 @@ function UserHomeScreen() {
         period: selectedPeriod,
         time: nextAvailableTime,
         date: appointmentDate,
+        concluido: 0,  // Agendamento não concluído inicialmente
       };
 
-      // Salva o agendamento no banco de dados
-    dbAppointments.transaction(tx => {
-      tx.executeSql(
-        `INSERT INTO appointments (clientName, service, barber, period, time, date)
-        VALUES (?, ?, ?, ?, ?, ?)`,
-        [clientName, selectedService, selectedBarber, selectedPeriod, nextAvailableTime, appointmentDate],
-        (_txObj, resultSet) => {
-          setAppointments([...appointments, { id: resultSet.insertId, ...newAppointment }]);
-          setQueue(sortQueue([...queue, newAppointment]));
-        },
-        (_txObj, error) => console.error('Erro ao adicionar agendamento', error)
-      );
-    });
+      // Inserir no banco de dados
+      db.transaction(tx => {
+        tx.executeSql(
+          `INSERT INTO appointments (clientName, service, barber, period, time, date, concluido)
+          VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [clientName, selectedService, selectedBarber, selectedPeriod, nextAvailableTime, appointmentDate, 0],
+          (_txObj, resultSet) => {
+            setAppointments([...appointments, { id: resultSet.insertId, ...newAppointment }]);
+            setQueue(sortQueue([...queue, newAppointment]));
+          },
+          (_txObj, error) => console.error('Erro ao adicionar agendamento', error)
+        );
+      });
   
-      // Atualiza os estados e limpa os campos
-      const updatedQueue = sortQueue([...queue, newAppointment]);
-      setQueue(updatedQueue);
-      setAppointments([...appointments, newAppointment]);
+
       setClientName('');
       setSelectedService('');
       setSelectedBarber('');
@@ -635,16 +610,27 @@ function UserHomeScreen() {
   const handleRemoveAppointment = (index) => {
     const appointmentToRemove = appointments[index];
   
+    // Verifica se o agendamento a ser removido existe
+    if (!appointmentToRemove || !appointmentToRemove.id) {
+        console.error('Agendamento não encontrado ou ID inválido');
+        return;
+    }
+
+    // Alerta de confirmação antes de remover o agendamento
     Alert.alert('Confirmação', 'Você tem certeza que deseja remover este agendamento?', [
       { text: 'Cancelar', style: 'cancel' },
       {
         text: 'Remover',
         onPress: () => {
+          // Transação no banco de dados SQLite
           dbAppointments.transaction(tx => {
             tx.executeSql(
-              `DELETE FROM appointments WHERE id = ?`,
-              [appointmentToRemove.id],
+              `DELETE FROM appointments WHERE id = ?`, // Query SQL
+              [appointmentToRemove.id], // Passando o ID do agendamento
               () => {
+                console.log('Agendamento removido com sucesso');
+
+                // Atualiza a lista de agendamentos e a fila
                 setAppointments(appointments.filter((_, i) => i !== index));
                 setQueue(queue.filter((_, i) => i !== index));
               },
@@ -654,23 +640,21 @@ function UserHomeScreen() {
         },
       },
     ]);
-  };
+};
+
   
 
   const sortQueue = (queue) => {
     return [...queue].sort((a, b) => {
-      // Extrai dia, mês e ano para cada agendamento
       const [dayA, monthA, yearA] = a.date.split('/');
       const [dayB, monthB, yearB] = b.date.split('/');
   
-      // Cria objetos Date para comparação
       const dateA = new Date(yearA, monthA - 1, dayA, ...a.time.split(':').map(Number));
       const dateB = new Date(yearB, monthB - 1, dayB, ...b.time.split(':').map(Number));
   
       if (dateA < dateB) return -1;
       if (dateA > dateB) return 1;
   
-      // Ordena por período se as datas forem iguais
       const periodOrder = { 'Manhã': 1, 'Tarde': 2, 'Noite': 3 };
       return periodOrder[a.period] - periodOrder[b.period];
     });
@@ -705,7 +689,7 @@ function UserHomeScreen() {
     }
   };
 
-  // Função para converter um horário (HH:mm) em minutos
+  // Função para converter horário em minutos
   const convertToMinutes = (time) => {
     const [hours, minutes] = time.split(':').map(Number);
     return hours * 60 + minutes;
@@ -713,24 +697,17 @@ function UserHomeScreen() {
 
   const handleCompleteAppointment = (index) => {
     const completedAppointment = appointments[index];
-    const { clientName, service, barber, period, date } = completedAppointment;
-    
-    // Desmembrando a data no formato DD/MM/YYYY
-    const [day, month, year] = date.split('/');
+    const { id } = completedAppointment;
 
-    // Buscando o preço do serviço
-    const price = servicesList.find(s => s.name === service)?.price || 0;
-
-    // Inserindo os dados no banco de dados de serviços concluídos
-    dbCompletedServices.transaction(tx => {
+    // Atualizar o agendamento existente para "concluído"
+    db.transaction(tx => {
       tx.executeSql(
-        `INSERT INTO completedServices (clientName, day, month, year, period, service, barber, price)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [clientName, day, month, year, period, service, barber, price],
+        `UPDATE appointments SET concluido = 1 WHERE id = ?`,
+        [id],
         () => {
-          alert('Serviço concluído e salvo com sucesso!');
-          // Remover o agendamento da lista
+          // Remover da lista visual
           setAppointments(appointments.filter((_, i) => i !== index));
+          setQueue(queue.filter((_, i) => i !== index));
         },
         (_txObj, error) => console.error('Erro ao concluir serviço', error)
       );
