@@ -389,15 +389,19 @@ const AdminReportScreen = () => {
 };
 
 const openDatabaseAsync = async () => {
-  return new Promise(async (resolve, reject) => {
-    const db = await SQLite.openDatabaseAsync('barbearia.db', null, null, null, (error) => {
-      if (error) {
-        reject(error);
-      } else {
-        resolve(db);
-      }
-    });
-  });
+  try {
+    const db = await SQLite.openDatabaseAsync('barbearia.db'); // Ensure correct path
+
+    if (!db) {
+      console.error("Erro ao abrir o banco de dados: O banco de dados não foi inicializado corretamente.");
+      return null; // Return null if database is not initialized
+    }
+
+    return db;
+  } catch (error) {
+    console.error("Erro ao abrir o banco de dados:", error);
+    return null; // Return null if an error occurs
+  }
 };
 
 // Tela de agendamentos para usuários
@@ -428,15 +432,23 @@ function UserHomeScreen() {
     const setupDatabase = async () => {
       try {
         const database = await openDatabaseAsync();
-        setDb(database);
-        createTables(database);
-        loadAppointments(database);
+        if (database) {
+          setDb(database);
+          await createTables(database);
+          await loadAppointments(database);
+        } else {
+          console.error("Erro ao abrir o banco de dados: O banco de dados não foi inicializado corretamente.");
+        }
       } catch (error) {
-        console.error("Erro ao abrir o banco de dados", error);
+        console.error("Erro ao abrir o banco de dados:", error);
       }
     };
 
     setupDatabase();
+  }, []);
+
+  console.log('Database:', db);
+  useEffect(() => {
     // Carregar serviços, barbeiros e horários
     const loadData = async () => {
       try {
@@ -463,32 +475,39 @@ function UserHomeScreen() {
   }, []);
 
   // Função para criar as tabelas (apenas uma tabela)
-  const createTables = (database) => {
-    database.transaction(tx => {
-      tx.executeSql(
-        `CREATE TABLE IF NOT EXISTS appointments (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          clientName TEXT,
-          day INTEGER,
-          month INTEGER,
-          year INTEGER,
-          period TEXT,
-          service TEXT,
-          barber TEXT,
-          price REAL,
-          concluido BOOLEAN DEFAULT 0
-        );`
-      );
-    });
-  };
-
-  const loadAppointments = (database) => {
-    database.transaction(tx => {
-      tx.executeSql(`SELECT * FROM appointments`, [], (_txObj, { rows: { _array } }) => {
-        setAppointments(_array);
-        setQueue(sortQueue(_array));
+  const createTables = async (database) => {
+    if (database) {
+      database.transaction(tx => {
+        tx.executeSql(
+          `CREATE TABLE IF NOT EXISTS appointments (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              clientName TEXT,
+              day INTEGER,
+              month INTEGER,
+              year INTEGER,
+              period TEXT,
+              service TEXT,
+              barber TEXT,
+              price REAL,
+              concluido BOOLEAN DEFAULT 0
+          );`
+        );
       });
-    });
+    } else {
+      console.error("Banco de dados não foi inicializado.");
+    }
+  }; 
+
+  const loadAppointments = async (database) => {
+    if (database) {
+      database.transaction(async (tx) => {
+        const results = await tx.executeSql(`SELECT * FROM appointments`);
+        setAppointments(results.rows._array);
+        setQueue(sortQueue(results.rows._array));
+      });
+    } else {
+      console.error("Banco de dados não foi inicializado.");
+    }
   };
 
   const daysInMonth = (month, year) => {
@@ -515,7 +534,7 @@ function UserHomeScreen() {
     });
   }; 
 
-  const handleSchedule = () => {
+  const handleSchedule = async () => {
     if (clientName && selectedService && selectedBarber && selectedPeriod && day && month) {
       const currentYear = year; // Usando o ano selecionado
       const appointmentDate = `${day}/${month}/${currentYear}`;
@@ -536,17 +555,29 @@ function UserHomeScreen() {
         return;
       }
       const serviceDuration = parseInt(service.duration); // Duração em minutos
-
+  
       const appointmentsForDay = queue.filter(appointment => 
         appointment.date === appointmentDate && appointment.period === selectedPeriod
       );
       
       if (appointmentsForDay.length > 0) {
         const lastAppointment = appointmentsForDay[appointmentsForDay.length - 1];
-        nextAvailableTime = calculateNextAvailableTime(lastAppointment.time, serviceDuration);
         
-        if (convertToMinutes(nextAvailableTime) + serviceDuration > convertToMinutes(end)) {
-          alert('Não é possível agendar, o horário disponível excede o limite do período.');
+        // Aqui está a correção com `await` para garantir que a função assíncrona seja resolvida
+        try {
+          nextAvailableTime = await findNextAvailableSlot(appointmentDate, selectedPeriod);
+          
+          if (!nextAvailableTime) {
+            alert('Não há horários disponíveis para este período.');
+            return;
+          }
+  
+          if (convertToMinutes(nextAvailableTime) + serviceDuration > convertToMinutes(end)) {
+            alert('Não é possível agendar, o horário disponível excede o limite do período.');
+            return;
+          }
+        } catch (error) {
+          console.error('Erro ao buscar o próximo horário disponível:', error);
           return;
         }
       }
@@ -557,7 +588,7 @@ function UserHomeScreen() {
         alert('Não há tempo suficiente neste período para este serviço.');
         return;
       }
-
+  
       const newAppointment = {
         clientName,
         service: selectedService,
@@ -567,22 +598,32 @@ function UserHomeScreen() {
         date: appointmentDate,
         concluido: 0,  // Agendamento não concluído inicialmente
       };
-
-      // Inserir no banco de dados
-      db.transaction(tx => {
-        tx.executeSql(
-          `INSERT INTO appointments (clientName, service, barber, period, time, date, concluido)
-          VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [clientName, selectedService, selectedBarber, selectedPeriod, nextAvailableTime, appointmentDate, 0],
-          (_txObj, resultSet) => {
-            setAppointments([...appointments, { id: resultSet.insertId, ...newAppointment }]);
-            setQueue(sortQueue([...queue, newAppointment]));
-          },
-          (_txObj, error) => console.error('Erro ao adicionar agendamento', error)
-        );
-      });
   
-
+      if (db) {
+        db.transaction(async (tx) => {
+          try {
+            console.log('Executing SQL query...');
+            const result = await tx.executeSql(
+              // ... your SQL query
+              [clientName, selectedService, selectedBarber, selectedPeriod, nextAvailableTime, appointmentDate, 0],
+            );
+        
+            if (result.rowsAffected === 1) {
+              // Successful insertion
+              console.log('Appointment inserted successfully.');
+              setAppointments([...appointments, { id: result.insertId, ...newAppointment }]);
+              setQueue(sortQueue([...queue, newAppointment]));
+            } else {
+              console.error('Error inserting appointment: No rows affected.');
+            }
+          } catch (error) {
+            console.error('Error inserting appointment:', error.message);
+          }
+        });
+    } else {
+      console.error('Banco de dados não está inicializado');
+    }
+  
       setClientName('');
       setSelectedService('');
       setSelectedBarber('');
@@ -593,19 +634,47 @@ function UserHomeScreen() {
     }
   };
   
-  // Função para calcular o próximo horário disponível com base no último horário e duração do serviço
-  const calculateNextAvailableTime = (lastTime, duration) => {
-    const [hours, minutes] = lastTime.split(':').map(Number);
-    let nextMinutes = minutes + parseInt(duration);
-    let nextHours = hours;
-
-    if (nextMinutes >= 60) {
-      nextHours += Math.floor(nextMinutes / 60);
-      nextMinutes = nextMinutes % 60;
-    }
-
-    return `${nextHours}:${nextMinutes < 10 ? '0' : ''}${nextMinutes}`;
+  const findNextAvailableSlot = async (day, period) => {
+    return new Promise((resolve, reject) => {
+      db.transaction(tx => {
+        // Consulta para verificar os horários ocupados
+        tx.executeSql(
+          `SELECT time FROM appointments WHERE date = ? AND period = ? ORDER BY time ASC`,
+          [day, period],
+          (_, { rows }) => {
+            let availableSlot = calculateNextAvailableSlot(rows._array);
+            resolve(availableSlot);
+          },
+          (_, error) => {
+            console.error("Erro ao buscar horários: ", error);
+            reject(error);
+          }
+        );
+      });
+    });
   };
+  
+  // Função para calcular o próximo horário disponível com base nos horários ocupados
+  const calculateNextAvailableSlot = (appointments) => {
+    const openingTime = '08:00';  // Horário de abertura
+    const closingTime = '18:00';  // Horário de fechamento
+    let lastEndTime = openingTime;
+  
+    for (let i = 0; i < appointments.length; i++) {
+      let { time: startTime } = appointments[i];
+  
+      // Se houver uma lacuna entre o fim do último agendamento e o início do próximo, esse é o próximo horário disponível
+      if (lastEndTime < startTime) {
+        return lastEndTime;
+      }
+  
+      // Atualiza o último horário de término para continuar a busca
+      lastEndTime = startTime;
+    }
+  
+    // Se não houver mais horários, o próximo horário disponível é após o último agendamento ou no fechamento
+    return lastEndTime < closingTime ? lastEndTime : null;
+  };  
 
   const handleRemoveAppointment = (index) => {
     const appointmentToRemove = appointments[index];
@@ -623,7 +692,7 @@ function UserHomeScreen() {
         text: 'Remover',
         onPress: () => {
           // Transação no banco de dados SQLite
-          dbAppointments.transaction(tx => {
+          db.transaction(tx => {
             tx.executeSql(
               `DELETE FROM appointments WHERE id = ?`, // Query SQL
               [appointmentToRemove.id], // Passando o ID do agendamento
@@ -675,7 +744,7 @@ function UserHomeScreen() {
         firstClient.time = secondClient.time;
   
         // O segundo cliente assume o horário do primeiro
-        secondClient.time = calculateNextAvailableTime(secondClient.time, parseInt(firstClient.service.duration));
+        secondClient.time = calculateNextAvailableSlot(secondClient.time, parseInt(firstClient.service.duration));
   
         // Atualiza a fila com os novos horários
         newQueue[0] = firstClient;
@@ -713,8 +782,6 @@ function UserHomeScreen() {
       );
     });
   };
-
-  
 
   return (
     <ScrollView style={styles.container}>
