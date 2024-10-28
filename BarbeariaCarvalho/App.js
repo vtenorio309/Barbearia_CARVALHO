@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'; // Certifique-se de importar useState e useEffect
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { NavigationContainer } from '@react-navigation/native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
 import { Ionicons } from '@expo/vector-icons';
 import { View, Text, TextInput, Button, TouchableOpacity, ScrollView, StyleSheet, Alert} from 'react-native';
@@ -17,9 +18,9 @@ function AdminHomeScreen() {
   const [barber, setBarber] = useState('');
   const [servicesList, setServicesList] = useState([]);
   const [barbersList, setBarbersList] = useState([]);
-  const [morningHours, setMorningHours] = useState(''); // Horário de funcionamento da manhã
-  const [afternoonHours, setAfternoonHours] = useState(''); // Horário de funcionamento da tarde
-  const [eveningHours, setEveningHours] = useState(''); // Horário de funcionamento da noite
+  const [morningHours, setMorningHours] = useState(''); 
+  const [afternoonHours, setAfternoonHours] = useState(''); 
+  const [eveningHours, setEveningHours] = useState(''); 
 
   useEffect(() => {
     const loadData = async () => {
@@ -109,7 +110,6 @@ function AdminHomeScreen() {
 
   return (
     <ScrollView style={styles.container}>
-      <Text style={styles.title}>Administração - Serviços e Barbeiros</Text>
 
       {/* Adicionar Serviço */}
       <TextInput
@@ -217,191 +217,170 @@ function AdminHomeScreen() {
   );  
 }
 
-// === AdminReportScreen ===
-const AdminReportScreen = () => {
-  const [selectedMonth, setSelectedMonth] = useState('');  // Filtro de mês
-  const [selectedYear, setSelectedYear] = useState('');    // Filtro de ano
-  const [reportData, setReportData] = useState(null);      // Dados extraídos do Excel
-
-  useEffect(() => {
-    loadDataFromExcel(); // Carregar os dados do Excel na inicialização
-  }, []);
-
-  const loadDataFromExcel = async () => {
-    const pathToFile = `${FileSystem.documentDirectory}relatorio_servicos.xlsx`;
-
-    try {
-      const fileData = await FileSystem.readAsStringAsync(pathToFile, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-
-      const workbook = XLSX.read(fileData, { type: 'base64' });
-      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet);
-
-      setReportData(jsonData);
-    } catch (error) {
-      console.error('Erro ao carregar arquivo Excel:', error);
-    }
-  };
-
-  // Função para filtrar dados por mês e ano
-  const filterDataByDate = () => {
-    if (!reportData) return [];
-    return reportData.filter(item => {
-      const itemDate = new Date(item.Horario); // A coluna "Horario" no arquivo Excel
-      const month = itemDate.getMonth() + 1;   // Mês do item (0-indexado)
-      const year = itemDate.getFullYear();     // Ano do item
-      return (month === parseInt(selectedMonth) && year === parseInt(selectedYear));
-    });
-  };
-
-  // Gerar dados de gráficos a partir dos dados filtrados
-  const generateChartsData = () => {
-    const filteredData = filterDataByDate();
-
-    // Dados de faturamento
-    const totalFaturamento = filteredData.reduce((sum, item) => sum + parseFloat(item.Preco), 0);
-
-    // Contagem de clientes
-    const totalClientes = filteredData.length;
-
-    // Serviço mais popular
-    const servicePopularity = {};
-    filteredData.forEach(item => {
-      if (servicePopularity[item.Serviço]) {
-        servicePopularity[item.Serviço]++;
-      } else {
-        servicePopularity[item.Serviço] = 1;
-      }
-    });
-    const mostPopularService = Object.keys(servicePopularity).reduce((a, b) =>
-      servicePopularity[a] > servicePopularity[b] ? a : b
-    );
-
-    return {
-      faturamento: totalFaturamento,
-      clientes: totalClientes,
-      popularService: mostPopularService,
-    };
-  };
-
-  // Renderizar gráficos com base nos dados
-  const renderCharts = () => {
-    const chartsData = generateChartsData();
-  
-    if (!chartsData || !chartsData.clientes || !chartsData.faturamento) {
-      return <Text>Não há dados suficientes para gerar gráficos.</Text>;
-    }
-
-    return (
-      <View>
-        <Text style={styles.chartTitle}>Faturamento Total: R${chartsData.faturamento.toFixed(2)}</Text>
-        <Text style={styles.chartTitle}>Total de Clientes: {chartsData.clientes}</Text>
-        <Text style={styles.chartTitle}>Serviço Mais Popular: {chartsData.popularService}</Text>
-
-        {/* Exemplo de gráfico de barras para o número de clientes */}
-        <BarChart
-          data={{
-            labels: ['Clientes'],
-            datasets: [
-              {
-                data: [chartsData.clientes],
-              },
-            ],
-          }}
-          width={300}
-          height={220}
-          yAxisLabel=""
-          chartConfig={{
-            backgroundColor: '#e26a00',
-            backgroundGradientFrom: '#fb8c00',
-            backgroundGradientTo: '#ffa726',
-            decimalPlaces: 0,
-            color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
-          }}
-          style={styles.chart}
-        />
-
-        {/* Exemplo de gráfico de linha para o faturamento */}
-        <LineChart
-          data={{
-            labels: ['Faturamento'],
-            datasets: [
-              {
-                data: [chartsData.faturamento],
-              },
-            ],
-          }}
-          width={300}
-          height={220}
-          yAxisLabel="R$"
-          chartConfig={{
-            backgroundColor: '#022173',
-            backgroundGradientFrom: '#1E2923',
-            backgroundGradientTo: '#08130D',
-            decimalPlaces: 2,
-            color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
-          }}
-          style={styles.chart}
-        />
-      </View>
-    );
-  };
-
-  return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.title}>Relatórios da Barbearia</Text>
-
-      {/* Filtros de Data */}
-      <Text style={styles.subtitle}>Selecionar Mês e Ano</Text>
-      <Picker
-        selectedValue={selectedMonth}
-        style={styles.picker}
-        onValueChange={(itemValue) => setSelectedMonth(itemValue)}
-      >
-        <Picker.Item label="Selecione o Mês" value="" />
-        <Picker.Item label="Janeiro" value="1" />
-        <Picker.Item label="Fevereiro" value="2" />
-        <Picker.Item label="Março" value="3" />
-        <Picker.Item label="Abril" value="4" />
-        {/* Adicione outros meses */}
-      </Picker>
-
-      <Picker
-        selectedValue={selectedYear}
-        style={styles.picker}
-        onValueChange={(itemValue) => setSelectedYear(itemValue)}
-      >
-        <Picker.Item label="Selecione o Ano" value="" />
-        <Picker.Item label="2023" value="2023" />
-        <Picker.Item label="2024" value="2024" />
-        {/* Adicione outros anos */}
-      </Picker>
-
-      {/* Botão para gerar relatórios */}
-      <Button title="Gerar Relatórios" onPress={renderCharts} />
-
-      {/* Renderização dos gráficos */}
-      {renderCharts()}
-    </ScrollView>
-  );
-};
-
 const openDatabaseAsync = async () => {
   try {
-    const db = await SQLite.openDatabaseAsync('barbearia.db'); // Ensure correct path
+    const db = await SQLite.openDatabaseAsync('barbearia.db'); // Caminho correto para abrir o banco de dados
 
     if (!db) {
       console.error("Erro ao abrir o banco de dados: O banco de dados não foi inicializado corretamente.");
-      return null; // Return null if database is not initialized
+      return null; // Retorna null se o banco de dados não for inicializado corretamente
     }
 
     return db;
   } catch (error) {
     console.error("Erro ao abrir o banco de dados:", error);
-    return null; // Return null if an error occurs
+    return null; // Retorna null em caso de erro
   }
+};
+
+// === AdminReportScreen ===
+const AdminReportScreen = () => {
+  const [years, setYears] = useState([]);
+  const [barbers, setBarbers] = useState([]);
+  const [periods, setPeriods] = useState([]);
+  const [selectedYear, setSelectedYear] = useState('');
+  const [selectedBarber, setSelectedBarber] = useState('');
+  const [selectedPeriod, setSelectedPeriod] = useState('');
+  const [chartsData, setChartsData] = useState(null);
+
+  // Carrega os dados de filtro e gráficos ao acessar a aba
+  useEffect(() => {
+    const loadFiltersAndData = async () => {
+      await loadUniqueFilterValues();
+      await updateChartData();
+    };
+    loadFiltersAndData();
+  }, [selectedYear, selectedBarber, selectedPeriod]);
+
+  // Função para obter valores únicos de ano, barbeiro e período
+  const loadUniqueFilterValues = async () => {
+    try {
+      const uniqueYears = await queryUniqueValues('year');
+      const uniqueBarbers = await queryUniqueValues('barber');
+      const uniquePeriods = await queryUniqueValues('period');
+      setYears(uniqueYears);
+      setBarbers(uniqueBarbers);
+      setPeriods(uniquePeriods);
+    } catch (error) {
+      console.error('Erro ao carregar filtros:', error);
+    }
+  };
+
+  // Função para consultar valores únicos de uma coluna no SQLite
+  const queryUniqueValues = (column) => {
+    return new Promise((resolve, reject) => {
+      db.transaction(tx => {
+        tx.executeSql(
+          `SELECT DISTINCT ${column} FROM appointments`,
+          [],
+          (_, { rows }) => resolve(rows._array.map(item => item[column])),
+          (_, error) => reject(error)
+        );
+      });
+    });
+  };
+
+  // Função para atualizar os dados do gráfico com base nos filtros selecionados
+  const updateChartData = async () => {
+    try {
+      const filteredData = await queryFilteredData();
+      const totalRevenue = filteredData.reduce((sum, item) => sum + item.price, 0);
+      const totalClients = filteredData.length;
+
+      const servicePopularity = {};
+      filteredData.forEach(item => {
+        servicePopularity[item.service] = (servicePopularity[item.service] || 0) + 1;
+      });
+      const mostPopularService = Object.keys(servicePopularity).reduce((a, b) => 
+        servicePopularity[a] > servicePopularity[b] ? a : b
+      );
+
+      setChartsData({
+        revenue: totalRevenue,
+        clients: totalClients,
+        popularService: mostPopularService
+      });
+    } catch (error) {
+      console.error('Erro ao atualizar os dados dos gráficos:', error);
+    }
+  };
+
+  // Função para consultar dados filtrados do SQLite
+  const queryFilteredData = () => {
+    return new Promise((resolve, reject) => {
+      const filters = [];
+      if (selectedYear) filters.push(`year = ${selectedYear}`);
+      if (selectedBarber) filters.push(`barber = '${selectedBarber}'`);
+      if (selectedPeriod) filters.push(`period = '${selectedPeriod}'`);
+
+      const query = `SELECT * FROM appointments ${filters.length ? `WHERE ${filters.join(' AND ')}` : ''}`;
+      
+      db.transaction(tx => {
+        tx.executeSql(
+          query,
+          [],
+          (_, { rows }) => resolve(rows._array),
+          (_, error) => reject(error)
+        );
+      });
+    });
+  };
+
+  return (
+    <ScrollView style={{ padding: 20 }}>
+      <Text style={{ fontSize: 20, fontWeight: 'bold' }}>Relatórios da Barbearia</Text>
+
+      {/* Filtros de Ano, Barbeiro e Período */}
+      <Text style={{ marginTop: 10 }}>Ano:</Text>
+      <Picker selectedValue={selectedYear} onValueChange={setSelectedYear}>
+        <Picker.Item label="Selecione o Ano" value="" />
+        {years.map(year => <Picker.Item key={year} label={year.toString()} value={year.toString()} />)}
+      </Picker>
+
+      <Text style={{ marginTop: 10 }}>Barbeiro:</Text>
+      <Picker selectedValue={selectedBarber} onValueChange={setSelectedBarber}>
+        <Picker.Item label="Selecione o Barbeiro" value="" />
+        {barbers.map(barber => <Picker.Item key={barber} label={barber} value={barber} />)}
+      </Picker>
+
+      <Text style={{ marginTop: 10 }}>Período:</Text>
+      <Picker selectedValue={selectedPeriod} onValueChange={setSelectedPeriod}>
+        <Picker.Item label="Selecione o Período" value="" />
+        {periods.map(period => <Picker.Item key={period} label={period} value={period} />)}
+      </Picker>
+
+      {/* Gráficos */}
+      {chartsData ? (
+        <View style={{ marginTop: 20 }}>
+          <Text>Faturamento Total: R${chartsData.revenue.toFixed(2)}</Text>
+          <Text>Total de Clientes: {chartsData.clients}</Text>
+          <Text>Serviço Mais Popular: {chartsData.popularService}</Text>
+
+          <BarChart
+            data={{
+              labels: ['Clientes'],
+              datasets: [{ data: [chartsData.clients] }],
+            }}
+            width={300}
+            height={220}
+            chartConfig={{ backgroundGradientFrom: '#fb8c00', backgroundGradientTo: '#ffa726', color: () => '#fff' }}
+          />
+          <LineChart
+            data={{
+              labels: ['Faturamento'],
+              datasets: [{ data: [chartsData.revenue] }],
+            }}
+            width={300}
+            height={220}
+            yAxisLabel="R$"
+            chartConfig={{ backgroundGradientFrom: '#022173', backgroundGradientTo: '#1E2923', color: () => '#fff' }}
+          />
+        </View>
+      ) : (
+        <Text style={{ marginTop: 20 }}>Carregando dados dos gráficos...</Text>
+      )}
+    </ScrollView>
+  );
 };
 
 // Tela de agendamentos para usuários
@@ -416,18 +395,9 @@ function UserHomeScreen() {
   const [servicesList, setServicesList] = useState([]);
   const [barbersList, setBarbersList] = useState([]);
   const [periods, setPeriods] = useState(['Manhã', 'Tarde', 'Noite']);
-  const [day, setDay] = useState('');
-  const [month, setMonth] = useState(new Date().getMonth() + 1); // Mês atual
-  const [year, setYear] = useState(new Date().getFullYear()); // Ano atual
+  const [date, setDate] = useState(new Date()); // Usa a data atual
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
-  useEffect(() => {
-    // Limita o número de dias com base no mês e ano selecionados
-    const maxDays = daysInMonth(month, year);
-    if (day > maxDays) {
-      setDay(maxDays.toString()); // Ajusta o dia automaticamente
-    }
-  }, [month, year, day]);
-  
   useEffect(() => {
     const setupDatabase = async () => {
       try {
@@ -443,20 +413,18 @@ function UserHomeScreen() {
         console.error("Erro ao abrir o banco de dados:", error);
       }
     };
-
+  
     setupDatabase();
   }, []);
 
-  console.log('Database:', db);
   useEffect(() => {
     // Carregar serviços, barbeiros e horários
     const loadData = async () => {
       try {
-        // Carregar serviços, barbeiros e horários
         const services = await AsyncStorage.getItem('services');
         const barbers = await AsyncStorage.getItem('barbers');
         const hours = await AsyncStorage.getItem('workingHours');
-    
+
         if (services) setServicesList(JSON.parse(services));
         if (barbers) setBarbersList(JSON.parse(barbers));
         if (hours) {
@@ -466,7 +434,7 @@ function UserHomeScreen() {
             { label: 'Tarde', start: afternoon.start, end: afternoon.end },
             { label: 'Noite', start: evening.start, end: evening.end },
           ]);
-        }  
+        }
       } catch (e) {
         console.error("Erro ao carregar dados", e);
       }
@@ -474,104 +442,91 @@ function UserHomeScreen() {
     loadData();
   }, []);
 
-  // Função para criar as tabelas (apenas uma tabela)
+  const handleDateChange = (event, selectedDate) => {
+    const currentDate = selectedDate || date;
+    setShowDatePicker(false);
+    setDate(currentDate); // Atualiza a data selecionada
+  };
+
+  const handleShowDatePicker = () => {
+    setShowDatePicker(true); // Exibe o calendário
+  };
+
   const createTables = async (database) => {
     if (database) {
       database.transaction(tx => {
         tx.executeSql(
           `CREATE TABLE IF NOT EXISTS appointments (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              clientName TEXT,
-              day INTEGER,
-              month INTEGER,
-              year INTEGER,
-              period TEXT,
-              service TEXT,
-              barber TEXT,
-              price REAL,
-              concluido BOOLEAN DEFAULT 0
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            clientName TEXT,
+            day INTEGER,
+            month INTEGER,
+            year INTEGER,
+            period TEXT,
+            service TEXT,
+            barber TEXT,
+            price REAL,
+            concluido BOOLEAN DEFAULT 0
           );`
         );
       });
     } else {
       console.error("Banco de dados não foi inicializado.");
     }
-  }; 
+  };
 
   const loadAppointments = async (database) => {
     if (database) {
-      database.transaction(async (tx) => {
-        const results = await tx.executeSql(`SELECT * FROM appointments`);
+      try {
+        const results = await database.transaction(async (tx) => {
+          return await tx.executeSql(`SELECT * FROM appointments`);
+        });
+  
         setAppointments(results.rows._array);
         setQueue(sortQueue(results.rows._array));
-      });
+      } catch (error) {
+        console.error("Erro ao carregar agendamentos:", error);
+      }
     } else {
       console.error("Banco de dados não foi inicializado.");
     }
   };
 
-  const daysInMonth = (month, year) => {
-    return new Date(year, month, 0).getDate(); // Retorna o número de dias no mês
-  };
-
-  const handleNextMonth = () => {
-    setMonth((prevMonth) => {
-      if (prevMonth === 12) {
-        setYear(year + 1); // Incrementa o ano quando passar de dezembro
-        return 1; // Vai para janeiro
-      }
-      return prevMonth + 1;
-    });
-  };
-
-  const handlePreviousMonth = () => {
-    setMonth((prevMonth) => {
-      if (prevMonth === 1) {
-        setYear(year - 1); // Decrementa o ano quando passar de janeiro
-        return 12; // Vai para dezembro
-      }
-      return prevMonth - 1;
-    });
-  }; 
-
   const handleSchedule = async () => {
-    if (clientName && selectedService && selectedBarber && selectedPeriod && day && month) {
-      const currentYear = year; // Usando o ano selecionado
-      const appointmentDate = `${day}/${month}/${currentYear}`;
-      
-      // Obtém o período selecionado (Manhã, Tarde, Noite)
+    if (clientName && selectedService && selectedBarber && selectedPeriod) {
+      const day = date.getDate();
+      const month = date.getMonth() + 1; // Mês começa de 0
+      const year = date.getFullYear();
+      const appointmentDate = `${day}/${month}/${year}`;
+
       const selectedPeriodDetails = periods.find(p => p.label === selectedPeriod);
       if (!selectedPeriodDetails) {
         alert('Período inválido!');
         return;
       }
       const { start, end } = selectedPeriodDetails;
-      
+
       let nextAvailableTime = start;
-  
+
       const service = servicesList.find(service => service.name === selectedService);
       if (!service) {
         alert('Serviço inválido!');
         return;
       }
       const serviceDuration = parseInt(service.duration); // Duração em minutos
-  
-      const appointmentsForDay = queue.filter(appointment => 
+
+      const appointmentsForDay = queue.filter(appointment =>
         appointment.date === appointmentDate && appointment.period === selectedPeriod
       );
-      
+
       if (appointmentsForDay.length > 0) {
-        const lastAppointment = appointmentsForDay[appointmentsForDay.length - 1];
-        
-        // Aqui está a correção com `await` para garantir que a função assíncrona seja resolvida
         try {
           nextAvailableTime = await findNextAvailableSlot(appointmentDate, selectedPeriod);
-          
           if (!nextAvailableTime) {
             alert('Não há horários disponíveis para este período.');
             return;
           }
-  
+
           if (convertToMinutes(nextAvailableTime) + serviceDuration > convertToMinutes(end)) {
             alert('Não é possível agendar, o horário disponível excede o limite do período.');
             return;
@@ -581,63 +536,44 @@ function UserHomeScreen() {
           return;
         }
       }
-  
-      const periodEndTime = convertToMinutes(end);
-      const nextAvailableTimeInMinutes = convertToMinutes(nextAvailableTime);
-      if (nextAvailableTimeInMinutes + serviceDuration > periodEndTime) {
-        alert('Não há tempo suficiente neste período para este serviço.');
-        return;
-      }
-  
+
       const newAppointment = {
         clientName,
         service: selectedService,
         barber: selectedBarber,
         period: selectedPeriod,
-        time: nextAvailableTime,
         date: appointmentDate,
-        concluido: 0,  // Agendamento não concluído inicialmente
+        concluido: 0, // Agendamento não concluído inicialmente
       };
-  
+
       if (db) {
-        db.transaction(async (tx) => {
-          try {
-            console.log('Executing SQL query...');
-            const result = await tx.executeSql(
-              // ... your SQL query
-              [clientName, selectedService, selectedBarber, selectedPeriod, nextAvailableTime, appointmentDate, 0],
-            );
-        
-            if (result.rowsAffected === 1) {
-              // Successful insertion
-              console.log('Appointment inserted successfully.');
+        db.transaction(tx => {
+          tx.executeSql(
+            `INSERT INTO appointments (clientName, service, barber, period, time, date, concluido) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [clientName, selectedService, selectedBarber, selectedPeriod, nextAvailableTime, appointmentDate, 0],
+            (_, result) => {
               setAppointments([...appointments, { id: result.insertId, ...newAppointment }]);
               setQueue(sortQueue([...queue, newAppointment]));
-            } else {
-              console.error('Error inserting appointment: No rows affected.');
-            }
-          } catch (error) {
-            console.error('Error inserting appointment:', error.message);
-          }
+            },
+            (_txObj, error) => console.error('Erro ao inserir agendamento', error)
+          );
         });
-    } else {
-      console.error('Banco de dados não está inicializado');
-    }
-  
+      } else {
+        console.error('Banco de dados não está inicializado');
+      }
+
       setClientName('');
       setSelectedService('');
       setSelectedBarber('');
       setSelectedPeriod('');
-      setDay('');
     } else {
       alert("Por favor, preencha todos os campos antes de marcar.");
     }
   };
-  
+
   const findNextAvailableSlot = async (day, period) => {
     return new Promise((resolve, reject) => {
       db.transaction(tx => {
-        // Consulta para verificar os horários ocupados
         tx.executeSql(
           `SELECT time FROM appointments WHERE date = ? AND period = ? ORDER BY time ASC`,
           [day, period],
@@ -653,26 +589,22 @@ function UserHomeScreen() {
       });
     });
   };
-  
-  // Função para calcular o próximo horário disponível com base nos horários ocupados
+
   const calculateNextAvailableSlot = (appointments) => {
     const openingTime = '08:00';  // Horário de abertura
     const closingTime = '18:00';  // Horário de fechamento
     let lastEndTime = openingTime;
-  
+
     for (let i = 0; i < appointments.length; i++) {
       let { time: startTime } = appointments[i];
-  
-      // Se houver uma lacuna entre o fim do último agendamento e o início do próximo, esse é o próximo horário disponível
+
       if (lastEndTime < startTime) {
         return lastEndTime;
       }
-  
-      // Atualiza o último horário de término para continuar a busca
+
       lastEndTime = startTime;
     }
-  
-    // Se não houver mais horários, o próximo horário disponível é após o último agendamento ou no fechamento
+
     return lastEndTime < closingTime ? lastEndTime : null;
   };  
 
@@ -785,7 +717,6 @@ function UserHomeScreen() {
 
   return (
     <ScrollView style={styles.container}>
-      <Text style={styles.title}>Agendamentos</Text>
 
       <TextInput
         style={styles.input}
@@ -832,22 +763,19 @@ function UserHomeScreen() {
       </Picker>
 
 
-      <View style={styles.datePickerContainer}>
-        <TextInput
-          style={styles.input}
-          placeholder="Dia"
-          keyboardType="numeric"
-          value={day}
-          onChangeText={(value) => setDay(value)}
-          maxLength={2}
-        />
-        <Text style={styles.dateText}>{`/ ${month} / ${year}`}</Text>
-
-        <View style={styles.monthNav}>
-          <Button title="◄" onPress={handlePreviousMonth} />
-          <Button title="►" onPress={handleNextMonth} />
-        </View>
+      <View style={styles.dateContainer}>
+        <Button title="Selecionar Data" onPress={handleShowDatePicker} />
+        <Text>Data Selecionada: {date.toLocaleDateString()}</Text>
       </View>
+
+      {showDatePicker && (
+        <DateTimePicker
+          value={date}
+          mode="date"
+          display="calendar"
+          onChange={handleDateChange}
+        />
+      )}
 
       <TouchableOpacity style={styles.button} onPress={handleSchedule}>
         <Text style={styles.buttonText}>Marcar</Text>
@@ -936,42 +864,61 @@ const styles = StyleSheet.create({
     backgroundColor: '#f5f5f5',
     padding: 16,
   },
-  
+
   // Títulos principais
   title: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#2c3e50', // Cor escura para o título
     marginBottom: 16,
     textAlign: 'center',
   },
 
   // Subtítulos (usado para pequenos títulos ou descrições)
   subtitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '600',
-    color: '#555',
-    marginBottom: 8,
+    color: '#27ae60', // Verde para subtítulos
+    marginBottom: 12,
+    textAlign: 'left',
   },
 
-  // Campo de seleção de data (mês e ano)
+  // Campo de entrada
+  input: {
+    borderWidth: 1,
+    borderColor: '#27ae60', // Verde
+    borderRadius: 5,
+    padding: 12,
+    backgroundColor: '#fff',
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+
+  // Campo de seleção
   picker: {
     height: 50,
     width: '100%',
-    borderColor: '#ccc',
+    borderColor: '#27ae60',
     borderWidth: 1,
     borderRadius: 5,
     marginBottom: 12,
     backgroundColor: '#fff',
   },
 
-  // Botão para gerar relatórios
+  // Botões
   button: {
-    backgroundColor: '#3498db',
+    backgroundColor: '#3498db', // Azul
     padding: 12,
     borderRadius: 5,
     alignItems: 'center',
-    marginTop: 12,
+    marginVertical: 12,
   },
   buttonText: {
     color: '#fff',
@@ -981,9 +928,9 @@ const styles = StyleSheet.create({
 
   // Estilos dos títulos de gráficos
   chartTitle: {
-    fontSize: 16,
+    fontSize: 20,
     fontWeight: 'bold',
-    color: '#444',
+    color: '#2c3e50',
     marginTop: 20,
     marginBottom: 10,
     textAlign: 'center',
@@ -1005,7 +952,7 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
 
-  // Estilo para listagem de informações (UserHomeScreen)
+  // Estilo para listagem de informações
   listItem: {
     backgroundColor: '#fff',
     padding: 16,
@@ -1024,7 +971,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#333',
   },
-  
+
   // Estilo para o campo de nome do cliente
   inputField: {
     borderWidth: 1,
@@ -1051,10 +998,50 @@ const styles = StyleSheet.create({
     shadowRadius: 3.84,
     elevation: 5,
   },
+
   reportText: {
     fontSize: 18,
     fontWeight: '600',
     color: '#333',
     marginBottom: 8,
+  },
+
+  // Estilos para os botões de agendamento
+  appointmentButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+
+  // Estilo para a seleção de data
+  dateContainer: {
+    marginVertical: 10,
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+
+  // Estilo para as mensagens informativas
+  moreInfo: {
+    color: '#3498db', // Azul
+    fontWeight: 'bold',
+  },
+
+  // Estilo para o cabeçalho dos gráficos
+  graphHeader: {
+    backgroundColor: '#2c3e50', // Cor escura
+    padding: 10,
+    borderRadius: 5,
+    marginBottom: 20,
+    color: '#fff',
   },
 });
