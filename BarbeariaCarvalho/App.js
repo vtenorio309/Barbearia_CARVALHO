@@ -8,7 +8,7 @@ import { View, Text, TextInput, Button, TouchableOpacity, ScrollView, StyleSheet
 import { LineChart, BarChart } from 'react-native-chart-kit'; // Para os gráficos
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system';
-import * as SQLite from 'expo-sqlite';
+import * as SQlite from 'expo-sqlite/legacy';
 import XLSX from 'xlsx';
 
 function AdminHomeScreen() {
@@ -18,9 +18,9 @@ function AdminHomeScreen() {
   const [barber, setBarber] = useState('');
   const [servicesList, setServicesList] = useState([]);
   const [barbersList, setBarbersList] = useState([]);
-  const [morningHours, setMorningHours] = useState(''); 
-  const [afternoonHours, setAfternoonHours] = useState(''); 
-  const [eveningHours, setEveningHours] = useState(''); 
+  const [morningHours, setMorningHours] = useState({ start: '', end: '' });
+  const [afternoonHours, setAfternoonHours] = useState({ start: '', end: '' });
+  const [eveningHours, setEveningHours] = useState({ start: '', end: '' });
 
   useEffect(() => {
     const loadData = async () => {
@@ -43,7 +43,6 @@ function AdminHomeScreen() {
     loadData();
   }, []);
 
-  // Função para salvar dados localmente
   const saveData = async () => {
     try {
       await AsyncStorage.setItem('services', JSON.stringify(servicesList));
@@ -55,7 +54,6 @@ function AdminHomeScreen() {
     }
   };
 
-  // Adicionar serviço
   const addService = () => {
     if (service && price && duration) {
       const newService = { name: service, price, duration };
@@ -69,7 +67,6 @@ function AdminHomeScreen() {
     }
   };
 
-  // Adicionar barbeiro
   const addBarber = () => {
     if (barber) {
       setBarbersList([...barbersList, barber]);
@@ -78,7 +75,6 @@ function AdminHomeScreen() {
     }
   };
 
-  // Remover serviço
   const removeService = (index) => {
     Alert.alert('Confirmação', 'Deseja remover este serviço?', [
       { text: 'Cancelar', style: 'cancel' },
@@ -93,7 +89,6 @@ function AdminHomeScreen() {
     ]);
   };
 
-  // Remover barbeiro
   const removeBarber = (index) => {
     Alert.alert('Confirmação', 'Deseja remover este barbeiro?', [
       { text: 'Cancelar', style: 'cancel' },
@@ -110,7 +105,6 @@ function AdminHomeScreen() {
 
   return (
     <ScrollView style={styles.container}>
-
       {/* Adicionar Serviço */}
       <TextInput
         style={styles.input}
@@ -132,7 +126,6 @@ function AdminHomeScreen() {
         value={duration}
         onChangeText={setDuration}
       />
-      
       <Button title="Adicionar Serviço" onPress={addService} />
       
       <Text style={styles.subtitle}>Serviços</Text>
@@ -160,78 +153,65 @@ function AdminHomeScreen() {
         </View>
       ))}
 
-    <Text style={styles.subtitle}>Horários de Funcionamento</Text>
+      {/* Horários de Funcionamento */}
+      <Text style={styles.subtitle}>Horários de Funcionamento</Text>
 
-    {/* Definir horário da manhã */}
-    <View style={styles.periodContainer}>
-      <Text style={styles.periodTitle}>Manhã</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Horário Inicial (Ex: 7:30)"
-        value={morningHours.start}
-        onChangeText={(text) => setMorningHours({ ...morningHours, start: text })}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Horário Final (Ex: 12:00)"
-        value={morningHours.end}
-        onChangeText={(text) => setMorningHours({ ...morningHours, end: text })}
-      />
-    </View>
+      {/* Manhã */}
+      <View style={styles.periodContainer}>
+        <Text style={styles.periodTitle}>Manhã</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Horário Inicial (Ex: 7:30)"
+          value={morningHours.start}
+          onChangeText={(text) => setMorningHours({ ...morningHours, start: text })}
+        />
+        <TextInput
+          style={styles.input}
+          placeholder="Horário Final (Ex: 12:00)"
+          value={morningHours.end}
+          onChangeText={(text) => setMorningHours({ ...morningHours, end: text })}
+        />
+      </View>
 
-    {/* Definir horário da tarde */}
-    <View style={styles.periodContainer}>
-      <Text style={styles.periodTitle}>Tarde</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Horário Inicial (Ex: 13:00)"
-        value={afternoonHours.start}
-        onChangeText={(text) => setAfternoonHours({ ...afternoonHours, start: text })}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Horário Final (Ex: 17:30)"
-        value={afternoonHours.end}
-        onChangeText={(text) => setAfternoonHours({ ...afternoonHours, end: text })}
-      />
-    </View>
+      {/* Tarde */}
+      <View style={styles.periodContainer}>
+        <Text style={styles.periodTitle}>Tarde</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Horário Inicial (Ex: 13:00)"
+          value={afternoonHours.start}
+          onChangeText={(text) => setAfternoonHours({ ...afternoonHours, start: text })}
+        />
+        <TextInput
+          style={styles.input}
+          placeholder="Horário Final (Ex: 17:30)"
+          value={afternoonHours.end}
+          onChangeText={(text) => setAfternoonHours({ ...afternoonHours, end: text })}
+        />
+      </View>
 
-    {/* Definir horário da noite */}
-    <View style={styles.periodContainer}>
-      <Text style={styles.periodTitle}>Noite</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Horário Inicial (Ex: 18:00)"
-        value={eveningHours.start}
-        onChangeText={(text) => setEveningHours({ ...eveningHours, start: text })}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Horário Final (Ex: 21:00)"
-        value={eveningHours.end}
-        onChangeText={(text) => setEveningHours({ ...eveningHours, end: text })}
-      />
-    </View>
+      {/* Noite */}
+      <View style={styles.periodContainer}>
+        <Text style={styles.periodTitle}>Noite</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Horário Inicial (Ex: 18:00)"
+          value={eveningHours.start}
+          onChangeText={(text) => setEveningHours({ ...eveningHours, start: text })}
+        />
+        <TextInput
+          style={styles.input}
+          placeholder="Horário Final (Ex: 21:00)"
+          value={eveningHours.end}
+          onChangeText={(text) => setEveningHours({ ...eveningHours, end: text })}
+        />
+      </View>
+
       <Button title="Salvar Horários" onPress={saveData} />
     </ScrollView>
   );  
 }
 
-const openDatabaseAsync = async () => {
-  try {
-    const db = await SQLite.openDatabaseAsync('barbearia.db'); // Caminho correto para abrir o banco de dados
-
-    if (!db) {
-      console.error("Erro ao abrir o banco de dados: O banco de dados não foi inicializado corretamente.");
-      return null; // Retorna null se o banco de dados não for inicializado corretamente
-    }
-
-    return db;
-  } catch (error) {
-    console.error("Erro ao abrir o banco de dados:", error);
-    return null; // Retorna null em caso de erro
-  }
-};
 
 // === AdminReportScreen ===
 const AdminReportScreen = () => {
@@ -383,50 +363,68 @@ const AdminReportScreen = () => {
   );
 };
 
+const db = SQlite.openDatabase('barbearia.db');
+
 // Tela de agendamentos para usuários
 function UserHomeScreen() {
-  const [db, setDb] = useState(null);
   const [clientName, setClientName] = useState('');
   const [appointments, setAppointments] = useState([]);
   const [selectedService, setSelectedService] = useState('');
   const [selectedBarber, setSelectedBarber] = useState('');
   const [selectedPeriod, setSelectedPeriod] = useState('');
+  const [selectedTime, setSelectedTime] = useState('');
   const [queue, setQueue] = useState([]);
   const [servicesList, setServicesList] = useState([]);
   const [barbersList, setBarbersList] = useState([]);
   const [periods, setPeriods] = useState(['Manhã', 'Tarde', 'Noite']);
-  const [date, setDate] = useState(new Date()); // Usa a data atual
+  const [availableTimes, setAvailableTimes] = useState([]);
+  const [date, setDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
 
   useEffect(() => {
-    const setupDatabase = async () => {
-      try {
-        const database = await openDatabaseAsync();
-        if (database) {
-          setDb(database);
-          await createTables(database);
-          await loadAppointments(database);
-        } else {
-          console.error("Erro ao abrir o banco de dados: O banco de dados não foi inicializado corretamente.");
-        }
-      } catch (error) {
-        console.error("Erro ao abrir o banco de dados:", error);
-      }
-    };
-  
     setupDatabase();
+    loadData();
+    fetchAppointments();
   }, []);
 
-  useEffect(() => {
-    // Carregar serviços, barbeiros e horários
-    const loadData = async () => {
-      try {
-        const services = await AsyncStorage.getItem('services');
-        const barbers = await AsyncStorage.getItem('barbers');
-        const hours = await AsyncStorage.getItem('workingHours');
+  const setupDatabase = () => {
+    db.transaction(tx => {
+      tx.executeSql(
+        `CREATE TABLE IF NOT EXISTS appointments (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          clientName TEXT,
+          day INTEGER,
+          month INTEGER,
+          year INTEGER,
+          time TEXT,
+          period TEXT,
+          service TEXT,
+          barber TEXT,
+          price REAL,
+          concluido BOOLEAN DEFAULT 0
+        );`,
+        [],
+        () => console.log("Tabela 'appointments' criada com sucesso."),
+        (_, error) => console.error("Erro ao criar a tabela:", error)
+      );
+    });
+  };
 
+  const loadData = () => {
+    AsyncStorage.getItem('services')
+      .then(services => {
         if (services) setServicesList(JSON.parse(services));
+      })
+      .catch(e => console.error("Erro ao carregar serviços", e));
+
+    AsyncStorage.getItem('barbers')
+      .then(barbers => {
         if (barbers) setBarbersList(JSON.parse(barbers));
+      })
+      .catch(e => console.error("Erro ao carregar barbeiros", e));
+
+    AsyncStorage.getItem('workingHours')
+      .then(hours => {
         if (hours) {
           const { morning, afternoon, evening } = JSON.parse(hours);
           setPeriods([
@@ -435,188 +433,152 @@ function UserHomeScreen() {
             { label: 'Noite', start: evening.start, end: evening.end },
           ]);
         }
-      } catch (e) {
-        console.error("Erro ao carregar dados", e);
-      }
-    };
-    loadData();
-  }, []);
-
-  const handleDateChange = (event, selectedDate) => {
-    const currentDate = selectedDate || date;
-    setShowDatePicker(false);
-    setDate(currentDate); // Atualiza a data selecionada
+      })
+      .catch(e => console.error("Erro ao carregar horários", e));
   };
 
-  const handleShowDatePicker = () => {
-    setShowDatePicker(true); // Exibe o calendário
+
+  const fetchAppointments = () => {
+    db.transaction(tx => {
+      tx.executeSql(
+        "SELECT * FROM appointments WHERE concluido = 0;",
+        [],
+        (_, { rows }) => {
+          const appointmentsList = rows._array;
+          setAppointments(appointmentsList);
+          setQueue(sortQueue(appointmentsList));
+        },
+        (_, error) => console.error("Erro ao buscar agendamentos:", error)
+      );
+    });
   };
 
-  const createTables = async (database) => {
-    if (database) {
-      database.transaction(tx => {
-        tx.executeSql(
-          `CREATE TABLE IF NOT EXISTS appointments (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            clientName TEXT,
-            day INTEGER,
-            month INTEGER,
-            year INTEGER,
-            period TEXT,
-            service TEXT,
-            barber TEXT,
-            price REAL,
-            concluido BOOLEAN DEFAULT 0
-          );`
-        );
-      });
-    } else {
-      console.error("Banco de dados não foi inicializado.");
+  const handleCompleteAppointment = (appointmentId) => {
+    if (!appointmentId) {
+      console.error("ID do agendamento inválido");
+      return;
     }
-  };
-
-  const loadAppointments = async (database) => {
-    if (database) {
-      try {
-        const results = await database.transaction(async (tx) => {
-          return await tx.executeSql(`SELECT * FROM appointments`);
-        });
   
-        setAppointments(results.rows._array);
-        setQueue(sortQueue(results.rows._array));
-      } catch (error) {
-        console.error("Erro ao carregar agendamentos:", error);
-      }
-    } else {
-      console.error("Banco de dados não foi inicializado.");
-    }
+    // Atualizar o agendamento existente para "concluído"
+    db.transaction(tx => {
+      tx.executeSql(
+        `UPDATE appointments SET concluido = 1 WHERE id = ?`,
+        [appointmentId],
+        () => {
+          console.log('Agendamento concluído com sucesso');
+  
+          // Recarrega a lista de agendamentos
+          fetchAppointments();
+        },
+        (_txObj, error) => console.error('Erro ao concluir serviço', error)
+      );
+    });
   };
+  
 
-  const handleSchedule = async () => {
-    if (clientName && selectedService && selectedBarber && selectedPeriod) {
-      const day = date.getDate();
-      const month = date.getMonth() + 1; // Mês começa de 0
-      const year = date.getFullYear();
-      const appointmentDate = `${day}/${month}/${year}`;
+  const calculateAvailableTimes = () => {
+    if (!selectedService || !selectedPeriod) return;
+    const service = servicesList.find(s => s.name === selectedService);
+    const periodDetails = periods.find(p => p.label === selectedPeriod);
+    if (!service || !periodDetails) return;
 
-      const selectedPeriodDetails = periods.find(p => p.label === selectedPeriod);
-      if (!selectedPeriodDetails) {
-        alert('Período inválido!');
-        return;
-      }
-      const { start, end } = selectedPeriodDetails;
+    const serviceDuration = parseInt(service.duration, 10);
+    const { start, end } = periodDetails;
 
-      let nextAvailableTime = start;
+    const startHour = parseInt(start.split(':')[0], 10);
+    const startMinute = parseInt(start.split(':')[1], 10);
+    const endHour = parseInt(end.split(':')[0], 10);
+    const endMinute = parseInt(end.split(':')[1], 10);
 
-      const service = servicesList.find(service => service.name === selectedService);
-      if (!service) {
-        alert('Serviço inválido!');
-        return;
-      }
-      const serviceDuration = parseInt(service.duration); // Duração em minutos
+    let availableSlots = [];
+    let currentHour = startHour;
+    let currentMinute = startMinute;
 
-      const appointmentsForDay = queue.filter(appointment =>
-        appointment.date === appointmentDate && appointment.period === selectedPeriod
+    while (currentHour < endHour || (currentHour === endHour && currentMinute < endMinute)) {
+      const time = `${currentHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')}`;
+      const isOccupied = appointments.some(app => 
+        app.period === selectedPeriod &&
+        app.day === date.getDate() &&
+        app.month === date.getMonth() + 1 &&
+        app.year === date.getFullYear() &&
+        app.time === time
       );
 
-      if (appointmentsForDay.length > 0) {
-        try {
-          nextAvailableTime = await findNextAvailableSlot(appointmentDate, selectedPeriod);
-          if (!nextAvailableTime) {
-            alert('Não há horários disponíveis para este período.');
-            return;
-          }
-
-          if (convertToMinutes(nextAvailableTime) + serviceDuration > convertToMinutes(end)) {
-            alert('Não é possível agendar, o horário disponível excede o limite do período.');
-            return;
-          }
-        } catch (error) {
-          console.error('Erro ao buscar o próximo horário disponível:', error);
-          return;
-        }
+      if (!isOccupied) {
+        availableSlots.push(time);
       }
 
+      currentMinute += serviceDuration;
+      if (currentMinute >= 60) {
+        currentHour += 1;
+        currentMinute -= 60;
+      }
+    }
+    setAvailableTimes(availableSlots);
+  };
+
+  useEffect(() => {
+    calculateAvailableTimes();
+  }, [selectedService, selectedPeriod, date]);
+
+  const handleSchedule = () => {
+    if (clientName && selectedService && selectedBarber && selectedPeriod && selectedTime) {
       const newAppointment = {
         clientName,
         service: selectedService,
         barber: selectedBarber,
         period: selectedPeriod,
-        date: appointmentDate,
-        concluido: 0, // Agendamento não concluído inicialmente
+        time: selectedTime,
+        day: date.getDate(),
+        month: date.getMonth() + 1,
+        year: date.getFullYear(),
+        concluido: 0,
       };
 
-      if (db) {
-        db.transaction(tx => {
-          tx.executeSql(
-            `INSERT INTO appointments (clientName, service, barber, period, time, date, concluido) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [clientName, selectedService, selectedBarber, selectedPeriod, nextAvailableTime, appointmentDate, 0],
-            (_, result) => {
-              setAppointments([...appointments, { id: result.insertId, ...newAppointment }]);
-              setQueue(sortQueue([...queue, newAppointment]));
-            },
-            (_txObj, error) => console.error('Erro ao inserir agendamento', error)
-          );
-        });
-      } else {
-        console.error('Banco de dados não está inicializado');
-      }
+      db.transaction(tx => {
+        tx.executeSql(
+          `INSERT INTO appointments (clientName, service, barber, period, time, day, month, year, concluido) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [clientName, selectedService, selectedBarber, selectedPeriod, selectedTime, newAppointment.day, newAppointment.month, newAppointment.year, 0],
+          (_, result) => {
+            fetchAppointments();
+            setAppointments([...appointments, { id: result.insertId, ...newAppointment }]);
+            setQueue(sortQueue([...queue, newAppointment]));
+          },
+          (_, error) => console.error('Erro ao inserir agendamento', error)
+        );
+      });
 
       setClientName('');
       setSelectedService('');
       setSelectedBarber('');
       setSelectedPeriod('');
+      setSelectedTime('');
     } else {
       alert("Por favor, preencha todos os campos antes de marcar.");
     }
   };
 
-  const findNextAvailableSlot = async (day, period) => {
-    return new Promise((resolve, reject) => {
-      db.transaction(tx => {
-        tx.executeSql(
-          `SELECT time FROM appointments WHERE date = ? AND period = ? ORDER BY time ASC`,
-          [day, period],
-          (_, { rows }) => {
-            let availableSlot = calculateNextAvailableSlot(rows._array);
-            resolve(availableSlot);
-          },
-          (_, error) => {
-            console.error("Erro ao buscar horários: ", error);
-            reject(error);
-          }
-        );
-      });
+  const sortQueue = queue => {
+    return [...queue].sort((a, b) => {
+      const dateA = new Date(a.year, a.month - 1, a.day, ...a.time.split(':').map(Number));
+      const dateB = new Date(b.year, b.month - 1, b.day, ...b.time.split(':').map(Number));
+      if (dateA < dateB) return -1;
+      if (dateA > dateB) return 1;
+
+      const periodOrder = { 'Manhã': 1, 'Tarde': 2, 'Noite': 3 };
+      return periodOrder[a.period] - periodOrder[b.period];
     });
   };
-
-  const calculateNextAvailableSlot = (appointments) => {
-    const openingTime = '08:00';  // Horário de abertura
-    const closingTime = '18:00';  // Horário de fechamento
-    let lastEndTime = openingTime;
-
-    for (let i = 0; i < appointments.length; i++) {
-      let { time: startTime } = appointments[i];
-
-      if (lastEndTime < startTime) {
-        return lastEndTime;
-      }
-
-      lastEndTime = startTime;
-    }
-
-    return lastEndTime < closingTime ? lastEndTime : null;
-  };  
 
   const handleRemoveAppointment = (index) => {
     const appointmentToRemove = appointments[index];
   
     // Verifica se o agendamento a ser removido existe
     if (!appointmentToRemove || !appointmentToRemove.id) {
-        console.error('Agendamento não encontrado ou ID inválido');
-        return;
+      console.error('Agendamento não encontrado ou ID inválido');
+      return;
     }
-
+  
     // Alerta de confirmação antes de remover o agendamento
     Alert.alert('Confirmação', 'Você tem certeza que deseja remover este agendamento?', [
       { text: 'Cancelar', style: 'cancel' },
@@ -624,41 +586,38 @@ function UserHomeScreen() {
         text: 'Remover',
         onPress: () => {
           // Transação no banco de dados SQLite
-          db.transaction(tx => {
-            tx.executeSql(
-              `DELETE FROM appointments WHERE id = ?`, // Query SQL
-              [appointmentToRemove.id], // Passando o ID do agendamento
-              () => {
-                console.log('Agendamento removido com sucesso');
-
-                // Atualiza a lista de agendamentos e a fila
-                setAppointments(appointments.filter((_, i) => i !== index));
-                setQueue(queue.filter((_, i) => i !== index));
-              },
-              (_txObj, error) => console.error('Erro ao remover agendamento', error)
-            );
-          });
+          db.transaction(
+            (tx) => {
+              tx.executeSql(
+                `DELETE FROM appointments WHERE id = ?`, // Query SQL
+                [appointmentToRemove.id], // Passando o ID do agendamento
+                (_, result) => {
+                  if (result.rowsAffected > 0) {
+                    console.log('Agendamento removido com sucesso');
+                    // Atualiza a lista de agendamentos e a fila removendo o agendamento
+                    setAppointments((prevAppointments) =>
+                      prevAppointments.filter((_, i) => i !== index)
+                    );
+                    setQueue((prevQueue) =>
+                      prevQueue.filter((_, i) => i !== index)
+                    );
+                  } else {
+                    console.error('Nenhum agendamento foi removido');
+                  }
+                },
+                (_, error) => {
+                  console.error('Erro ao remover agendamento', error);
+                  return false;
+                }
+              );
+            },
+            (error) => {
+              console.error('Erro na transação de remoção', error);
+            }
+          );
         },
       },
     ]);
-};
-
-  
-
-  const sortQueue = (queue) => {
-    return [...queue].sort((a, b) => {
-      const [dayA, monthA, yearA] = a.date.split('/');
-      const [dayB, monthB, yearB] = b.date.split('/');
-  
-      const dateA = new Date(yearA, monthA - 1, dayA, ...a.time.split(':').map(Number));
-      const dateB = new Date(yearB, monthB - 1, dayB, ...b.time.split(':').map(Number));
-  
-      if (dateA < dateB) return -1;
-      if (dateA > dateB) return 1;
-  
-      const periodOrder = { 'Manhã': 1, 'Tarde': 2, 'Noite': 3 };
-      return periodOrder[a.period] - periodOrder[b.period];
-    });
   };
   
 
@@ -688,108 +647,74 @@ function UserHomeScreen() {
     } else {
       alert('Não há mais clientes na fila para passar a vez.');
     }
-  };
-
-  // Função para converter horário em minutos
-  const convertToMinutes = (time) => {
-    const [hours, minutes] = time.split(':').map(Number);
-    return hours * 60 + minutes;
-  };
-
-  const handleCompleteAppointment = (index) => {
-    const completedAppointment = appointments[index];
-    const { id } = completedAppointment;
-
-    // Atualizar o agendamento existente para "concluído"
-    db.transaction(tx => {
-      tx.executeSql(
-        `UPDATE appointments SET concluido = 1 WHERE id = ?`,
-        [id],
-        () => {
-          // Remover da lista visual
-          setAppointments(appointments.filter((_, i) => i !== index));
-          setQueue(queue.filter((_, i) => i !== index));
-        },
-        (_txObj, error) => console.error('Erro ao concluir serviço', error)
-      );
-    });
-  };
+  };  
 
   return (
     <ScrollView style={styles.container}>
-
-      <TextInput
-        style={styles.input}
-        placeholder="Nome do Cliente"
-        value={clientName}
-        onChangeText={setClientName}
-      />
-
-      <Picker
-        selectedValue={selectedService}
-        style={styles.picker}
-        onValueChange={(itemValue) => setSelectedService(itemValue)}
-      >
+      <TextInput placeholder="Nome do Cliente" style={styles.picker} value={clientName} onChangeText={setClientName} />
+      <Picker selectedValue={selectedService} style={styles.picker} onValueChange={setSelectedService}>
         <Picker.Item label="Selecione o Serviço" value="" />
         {servicesList.map((service, index) => (
           <Picker.Item key={index} label={service.name} value={service.name} />
         ))}
       </Picker>
-
-      <Picker
-        selectedValue={selectedBarber}
-        style={styles.picker}
-        onValueChange={(itemValue) => setSelectedBarber(itemValue)}
-      >
+      <Picker selectedValue={selectedBarber} style={styles.picker} onValueChange={setSelectedBarber}>
         <Picker.Item label="Selecione o Barbeiro" value="" />
         {barbersList.map((barber, index) => (
           <Picker.Item key={index} label={barber} value={barber} />
         ))}
       </Picker>
 
-      <Picker
-        selectedValue={selectedPeriod}
-        style={styles.picker}
-        onValueChange={(itemValue) => setSelectedPeriod(itemValue)}
-      >
+
+      <Picker selectedValue={selectedPeriod} style={styles.picker} onValueChange={setSelectedPeriod}>
         <Picker.Item label="Selecione o Período" value="" />
         {periods.map((period, index) => (
-          <Picker.Item
-            key={index}
-            label={`${period.label}: ${period.start} - ${period.end}`}
-            value={period.label}
-          />
+          <Picker.Item key={index} label={`${period.label}: ${period.start} - ${period.end}`} value={period.label} />
         ))}
       </Picker>
 
+      {selectedPeriod && availableTimes.length > 0 && (
+        <Picker selectedValue={selectedTime} style={styles.picker} onValueChange={setSelectedTime}>
+          <Picker.Item label="Selecione o Horário" value="" />
+          {availableTimes.map((time, index) => (
+            <Picker.Item key={index} label={time} value={time} />
+          ))}
+        </Picker>
+      )}
 
       <View style={styles.dateContainer}>
-        <Button title="Selecionar Data" onPress={handleShowDatePicker} />
+        <Button title="Selecionar Data" onPress={setShowDatePicker} />
         <Text>Data Selecionada: {date.toLocaleDateString()}</Text>
       </View>
 
       {showDatePicker && (
-        <DateTimePicker
-          value={date}
-          mode="date"
-          display="calendar"
-          onChange={handleDateChange}
-        />
-      )}
+      <DateTimePicker
+        value={date}
+        mode="date"
+        display="calendar"
+        onChange={(_, selectedDate) => {
+          setShowDatePicker(false); // Fecha o picker ao selecionar a data
+          if (selectedDate) {
+            setDate(selectedDate); // Atualiza a data
+          }
+        }}
+      />
+    )}
+
 
       <TouchableOpacity style={styles.button} onPress={handleSchedule}>
         <Text style={styles.buttonText}>Marcar</Text>
       </TouchableOpacity>
 
       <Text style={styles.subtitle}>Agendamentos</Text>
-      {appointments.map((appointment, index) => (
-        <View key={index} style={styles.appointment}>
+      {appointments.map((appointment, _index) => (
+        <View key={appointment.id} style={styles.appointment}>
           <Text>{`${appointment.clientName} às ${appointment.time}`}</Text>
           <Text style={styles.moreInfo}> {'>'} Ver mais informações </Text>
           <View style={styles.appointmentButtons}>
-            <Button title="Passar Fila" onPress={handlePassQueue} />
-            <Button title="Remover" onPress={() => handleRemoveAppointment(index)} />
-            <Button title="Concluir" onPress={() => handleCompleteAppointment(index)} />
+            <Button title="Passar Fila" onPress={() => handlePassQueue(appointment.id)} />
+            <Button title="Remover" onPress={() => handleRemoveAppointment(appointment.id)} />
+            <Button title="Concluir" onPress={() => handleCompleteAppointment(appointment.id)} />
           </View>
         </View>
       ))}
@@ -861,7 +786,7 @@ const styles = StyleSheet.create({
   // Estilo geral da aplicação
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#1c1c1e', // Preto escuro para fundo geral
     padding: 16,
   },
 
@@ -869,16 +794,16 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#2c3e50', // Cor escura para o título
+    color: '#ff6f00', // Laranja para título principal
     marginBottom: 16,
     textAlign: 'center',
   },
 
-  // Subtítulos (usado para pequenos títulos ou descrições)
+  // Subtítulos
   subtitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#27ae60', // Verde para subtítulos
+    color: '#d4a373', // Tom de laranja mais suave
     marginBottom: 12,
     textAlign: 'left',
   },
@@ -886,19 +811,16 @@ const styles = StyleSheet.create({
   // Campo de entrada
   input: {
     borderWidth: 1,
-    borderColor: '#27ae60', // Verde
-    borderRadius: 5,
+    borderColor: '#27ae60', // Verde escuro
+    borderRadius: 8,
     padding: 12,
-    backgroundColor: '#fff',
+    backgroundColor: '#d4a373',
     marginBottom: 12,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    elevation: 3,
   },
 
   // Campo de seleção
@@ -907,18 +829,23 @@ const styles = StyleSheet.create({
     width: '100%',
     borderColor: '#27ae60',
     borderWidth: 1,
-    borderRadius: 5,
+    borderRadius: 8,
     marginBottom: 12,
-    backgroundColor: '#fff',
+    backgroundColor: '#d4a373',
   },
 
   // Botões
   button: {
-    backgroundColor: '#3498db', // Azul
+    backgroundColor: '#1e7e34', // Verde escuro para botões
     padding: 12,
-    borderRadius: 5,
+    borderRadius: 25, // Bordas arredondadas para visual moderno
     alignItems: 'center',
     marginVertical: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 5,
   },
   buttonText: {
     color: '#fff',
@@ -930,7 +857,7 @@ const styles = StyleSheet.create({
   chartTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#2c3e50',
+    color: '#ff6f00',
     marginTop: 20,
     marginBottom: 10,
     textAlign: 'center',
@@ -939,44 +866,38 @@ const styles = StyleSheet.create({
   // Estilos dos gráficos
   chart: {
     marginVertical: 10,
-    borderRadius: 10,
-    backgroundColor: '#fff',
+    borderRadius: 15,
+    backgroundColor: '#2b2b2d', // Fundo cinza escuro para gráficos
     padding: 10,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 6,
   },
 
   // Estilo para listagem de informações
   listItem: {
-    backgroundColor: '#fff',
+    backgroundColor: '#333',
     padding: 16,
-    borderRadius: 8,
+    borderRadius: 12,
     marginBottom: 8,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    elevation: 3,
   },
   listItemText: {
     fontSize: 16,
-    color: '#333',
+    color: '#fff',
   },
 
   // Estilo para o campo de nome do cliente
   inputField: {
     borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 5,
+    borderColor: '#27ae60',
+    borderRadius: 8,
     padding: 10,
     backgroundColor: '#fff',
     marginBottom: 12,
@@ -986,23 +907,19 @@ const styles = StyleSheet.create({
   reportSection: {
     marginTop: 20,
     paddingHorizontal: 16,
-    backgroundColor: '#f9f9f9',
-    borderRadius: 10,
+    backgroundColor: '#2b2b2d',
+    borderRadius: 15,
     padding: 16,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 6,
   },
-
   reportText: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#333',
+    color: '#ff6f00',
     marginBottom: 8,
   },
 
@@ -1018,30 +935,28 @@ const styles = StyleSheet.create({
     marginVertical: 10,
     alignItems: 'center',
     padding: 16,
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
+    backgroundColor: '#d4a373',
+    borderRadius: 12,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 6,
   },
 
   // Estilo para as mensagens informativas
   moreInfo: {
-    color: '#3498db', // Azul
+    color: '#1e7e34',
     fontWeight: 'bold',
   },
 
   // Estilo para o cabeçalho dos gráficos
   graphHeader: {
-    backgroundColor: '#2c3e50', // Cor escura
+    backgroundColor: '#333',
     padding: 10,
-    borderRadius: 5,
+    borderRadius: 8,
     marginBottom: 20,
-    color: '#fff',
+    color: '#ff6f00',
   },
 });
+
