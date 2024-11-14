@@ -3,13 +3,13 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { NavigationContainer } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, AntDesign } from '@expo/vector-icons';
 import { View, Text, TextInput, Button, TouchableOpacity, ScrollView, StyleSheet, Alert} from 'react-native';
-import { LineChart, BarChart } from 'react-native-chart-kit'; // Para os gráficos
+import { LineChart, BarChart, PieChart } from 'react-native-chart-kit'; // Para os gráficos
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system';
 import * as SQlite from 'expo-sqlite/legacy';
-import XLSX from 'xlsx';
+
 
 function AdminHomeScreen() {
   const [service, setService] = useState('');
@@ -103,6 +103,11 @@ function AdminHomeScreen() {
     ]);
   };
 
+  function validateTime(time) {
+    const regex = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
+    return regex.test(time);
+  }
+
   return (
     <ScrollView style={styles.container}>
       {/* Adicionar Serviço */}
@@ -132,7 +137,9 @@ function AdminHomeScreen() {
       {servicesList.map((service, index) => (
         <View key={index} style={styles.listItem}>
           <Text>{service.name} - R${service.price} - {service.duration} min</Text>
-          <Button title="Remover" onPress={() => removeService(index)} />
+          <TouchableOpacity style={styles.removeButton} onPress={() => removeService(index)}>
+            <Text style={styles.buttonText}>Remover</Text>
+          </TouchableOpacity>
         </View>
       ))}
 
@@ -149,7 +156,9 @@ function AdminHomeScreen() {
       {barbersList.map((barber, index) => (
         <View key={index} style={styles.listItem}>
           <Text>{barber}</Text>
-          <Button title="Remover" onPress={() => removeBarber(index)} />
+          <TouchableOpacity style={styles.removeButton} onPress={() => removeBarber(index)}>
+            <Text style={styles.buttonText}>Remover</Text>
+          </TouchableOpacity>
         </View>
       ))}
 
@@ -159,55 +168,68 @@ function AdminHomeScreen() {
       {/* Manhã */}
       <View style={styles.periodContainer}>
         <Text style={styles.periodTitle}>Manhã</Text>
+        <View style={styles.timeInputContainer}>
         <TextInput
-          style={styles.input}
-          placeholder="Horário Inicial (Ex: 7:30)"
+          style={[styles.input, !validateTime(morningHours.start) && styles.error]}
+          placeholder="Horário Inicial (Ex: 07:30)"
+          //keyboardType="numeric"
           value={morningHours.start}
           onChangeText={(text) => setMorningHours({ ...morningHours, start: text })}
         />
         <TextInput
-          style={styles.input}
+          style={[styles.input, !validateTime(morningHours.start) && styles.error]}
           placeholder="Horário Final (Ex: 12:00)"
+          //keyboardType="numeric"
           value={morningHours.end}
           onChangeText={(text) => setMorningHours({ ...morningHours, end: text })}
         />
+        </View>
       </View>
 
       {/* Tarde */}
       <View style={styles.periodContainer}>
         <Text style={styles.periodTitle}>Tarde</Text>
+        <View style={styles.timeInputContainer}>
         <TextInput
-          style={styles.input}
+          style={[styles.input, !validateTime(morningHours.start) && styles.error]}
           placeholder="Horário Inicial (Ex: 13:00)"
+          //keyboardType="numeric"
           value={afternoonHours.start}
           onChangeText={(text) => setAfternoonHours({ ...afternoonHours, start: text })}
         />
         <TextInput
-          style={styles.input}
+          style={[styles.input, !validateTime(morningHours.start) && styles.error]}
           placeholder="Horário Final (Ex: 17:30)"
+          //keyboardType="numeric"
           value={afternoonHours.end}
           onChangeText={(text) => setAfternoonHours({ ...afternoonHours, end: text })}
         />
+        </View>
       </View>
 
       {/* Noite */}
       <View style={styles.periodContainer}>
         <Text style={styles.periodTitle}>Noite</Text>
+        <View style={styles.timeInputContainer}>
         <TextInput
-          style={styles.input}
+          style={[styles.input, !validateTime(morningHours.start) && styles.error]}
           placeholder="Horário Inicial (Ex: 18:00)"
+          //keyboardType="numeric"
           value={eveningHours.start}
           onChangeText={(text) => setEveningHours({ ...eveningHours, start: text })}
         />
         <TextInput
-          style={styles.input}
+          style={[styles.input, !validateTime(morningHours.start) && styles.error]}
           placeholder="Horário Final (Ex: 21:00)"
+          //keyboardType="numeric"
           value={eveningHours.end}
           onChangeText={(text) => setEveningHours({ ...eveningHours, end: text })}
         />
+        </View>
       </View>
-
-      <Button title="Salvar Horários" onPress={saveData} />
+      <TouchableOpacity style={styles.adicionarButton} onPress={saveData}>
+        <Text style={styles.buttonText}>Salvar Horários</Text>
+      </TouchableOpacity>
     </ScrollView>
   );  
 }
@@ -223,7 +245,6 @@ const AdminReportScreen = () => {
   const [selectedPeriod, setSelectedPeriod] = useState('');
   const [chartsData, setChartsData] = useState(null);
 
-  // Carrega os dados de filtro e gráficos ao acessar a aba
   useEffect(() => {
     const loadFiltersAndData = async () => {
       await loadUniqueFilterValues();
@@ -232,21 +253,19 @@ const AdminReportScreen = () => {
     loadFiltersAndData();
   }, [selectedYear, selectedBarber, selectedPeriod]);
 
-  // Função para obter valores únicos de ano, barbeiro e período
   const loadUniqueFilterValues = async () => {
     try {
       const uniqueYears = await queryUniqueValues('year');
       const uniqueBarbers = await queryUniqueValues('barber');
       const uniquePeriods = await queryUniqueValues('period');
-      setYears(uniqueYears);
-      setBarbers(uniqueBarbers);
-      setPeriods(uniquePeriods);
+      setYears(uniqueYears || []);
+      setBarbers(uniqueBarbers || []);
+      setPeriods(uniquePeriods || []);
     } catch (error) {
       console.error('Erro ao carregar filtros:', error);
     }
   };
 
-  // Função para consultar valores únicos de uma coluna no SQLite
   const queryUniqueValues = (column) => {
     return new Promise((resolve, reject) => {
       db.transaction(tx => {
@@ -260,32 +279,40 @@ const AdminReportScreen = () => {
     });
   };
 
-  // Função para atualizar os dados do gráfico com base nos filtros selecionados
   const updateChartData = async () => {
     try {
       const filteredData = await queryFilteredData();
+      if (filteredData.length === 0) {
+        setChartsData(null);
+        return;
+      }
+
       const totalRevenue = filteredData.reduce((sum, item) => sum + item.price, 0);
       const totalClients = filteredData.length;
 
       const servicePopularity = {};
+      const barberPerformance = {};
+      const periodDistribution = { Manhã: 0, Tarde: 0, Noite: 0 };
+
       filteredData.forEach(item => {
         servicePopularity[item.service] = (servicePopularity[item.service] || 0) + 1;
+        barberPerformance[item.barber] = (barberPerformance[item.barber] || 0) + 1;
+        periodDistribution[item.period] += 1;
       });
-      const mostPopularService = Object.keys(servicePopularity).reduce((a, b) => 
-        servicePopularity[a] > servicePopularity[b] ? a : b
-      );
 
       setChartsData({
         revenue: totalRevenue,
         clients: totalClients,
-        popularService: mostPopularService
+        popularService: Object.keys(servicePopularity).reduce((a, b) => servicePopularity[a] > servicePopularity[b] ? a : b),
+        servicePopularity,
+        barberPerformance,
+        periodDistribution
       });
     } catch (error) {
       console.error('Erro ao atualizar os dados dos gráficos:', error);
     }
   };
 
-  // Função para consultar dados filtrados do SQLite
   const queryFilteredData = () => {
     return new Promise((resolve, reject) => {
       const filters = [];
@@ -310,7 +337,6 @@ const AdminReportScreen = () => {
     <ScrollView style={{ padding: 20 }}>
       <Text style={{ fontSize: 20, fontWeight: 'bold' }}>Relatórios da Barbearia</Text>
 
-      {/* Filtros de Ano, Barbeiro e Período */}
       <Text style={{ marginTop: 10 }}>Ano:</Text>
       <Picker selectedValue={selectedYear} onValueChange={setSelectedYear}>
         <Picker.Item label="Selecione o Ano" value="" />
@@ -329,7 +355,6 @@ const AdminReportScreen = () => {
         {periods.map(period => <Picker.Item key={period} label={period} value={period} />)}
       </Picker>
 
-      {/* Gráficos */}
       {chartsData ? (
         <View style={{ marginTop: 20 }}>
           <Text>Faturamento Total: R${chartsData.revenue.toFixed(2)}</Text>
@@ -338,26 +363,52 @@ const AdminReportScreen = () => {
 
           <BarChart
             data={{
-              labels: ['Clientes'],
-              datasets: [{ data: [chartsData.clients] }],
+              labels: Object.keys(chartsData.servicePopularity),
+              datasets: [{ data: Object.values(chartsData.servicePopularity) }],
             }}
             width={300}
             height={220}
-            chartConfig={{ backgroundGradientFrom: '#fb8c00', backgroundGradientTo: '#ffa726', color: () => '#fff' }}
+            chartConfig={{
+              backgroundGradientFrom: '#FB8C00',
+              backgroundGradientTo: '#FFA726',
+              color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
+            }}
           />
+
+          <PieChart
+            data={Object.keys(chartsData.barberPerformance).map((barber, index) => ({
+              name: barber,
+              population: chartsData.barberPerformance[barber],
+              color: ['#F39C12', '#3498DB', '#2ECC71'][index % 3],
+              legendFontColor: '#7F8C8D',
+              legendFontSize: 15,
+            }))}
+            width={300}
+            height={220}
+            chartConfig={{
+              color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+            }}
+            accessor="population"
+            backgroundColor="transparent"
+            paddingLeft="15"
+          />
+
           <LineChart
             data={{
-              labels: ['Faturamento'],
-              datasets: [{ data: [chartsData.revenue] }],
+              labels: Object.keys(chartsData.periodDistribution),
+              datasets: [{ data: Object.values(chartsData.periodDistribution) }],
             }}
             width={300}
             height={220}
-            yAxisLabel="R$"
-            chartConfig={{ backgroundGradientFrom: '#022173', backgroundGradientTo: '#1E2923', color: () => '#fff' }}
+            chartConfig={{
+              backgroundGradientFrom: '#022173',
+              backgroundGradientTo: '#1E2923',
+              color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
+            }}
           />
         </View>
       ) : (
-        <Text style={{ marginTop: 20 }}>Carregando dados dos gráficos...</Text>
+        <Text style={{ marginTop: 20 }}>Nenhum dado disponível para exibir no momento.</Text>
       )}
     </ScrollView>
   );
@@ -436,7 +487,15 @@ function UserHomeScreen() {
       })
       .catch(e => console.error("Erro ao carregar horários", e));
   };
-
+//
+ // useEffect(() => {
+  //  db.transaction((tx) => {
+   //   tx.executeSql('SELECT * FROM appointments', [], (_, { rows }) => {
+   //     console.log('Dados do banco de dados:', rows._array);
+   //   });
+   // });
+ // }, []);
+//
 
   const fetchAppointments = () => {
     db.transaction(tx => {
@@ -558,15 +617,25 @@ function UserHomeScreen() {
     }
   };
 
-  const sortQueue = queue => {
+  const sortQueue = (queue) => {
     return [...queue].sort((a, b) => {
       const dateA = new Date(a.year, a.month - 1, a.day, ...a.time.split(':').map(Number));
       const dateB = new Date(b.year, b.month - 1, b.day, ...b.time.split(':').map(Number));
+  
+      // Comparar pela data (ano, mês, dia)
       if (dateA < dateB) return -1;
       if (dateA > dateB) return 1;
-
+  
+      // Se as datas forem iguais, comparar pelo período ("Manhã" < "Tarde" < "Noite")
       const periodOrder = { 'Manhã': 1, 'Tarde': 2, 'Noite': 3 };
-      return periodOrder[a.period] - periodOrder[b.period];
+      if (periodOrder[a.period] !== periodOrder[b.period]) {
+        return periodOrder[a.period] - periodOrder[b.period];
+      }
+  
+      // Se data e período forem iguais, comparar pela hora (HH:MM)
+      const timeA = parseInt(a.time.split(':')[0], 10) * 60 + parseInt(a.time.split(':')[1], 10);
+      const timeB = parseInt(b.time.split(':')[0], 10) * 60 + parseInt(b.time.split(':')[1], 10);
+      return timeA - timeB;
     });
   };
 
@@ -651,7 +720,7 @@ function UserHomeScreen() {
 
   return (
     <ScrollView style={styles.container}>
-      <TextInput placeholder="Nome do Cliente" style={styles.picker} value={clientName} onChangeText={setClientName} />
+      <TextInput placeholder="  Nome do Cliente" style={styles.picker} value={clientName} onChangeText={setClientName} />
       <Picker selectedValue={selectedService} style={styles.picker} onValueChange={setSelectedService}>
         <Picker.Item label="Selecione o Serviço" value="" />
         {servicesList.map((service, index) => (
@@ -682,9 +751,12 @@ function UserHomeScreen() {
         </Picker>
       )}
 
-      <View style={styles.dateContainer}>
-        <Button title="Selecionar Data" onPress={setShowDatePicker} />
-        <Text>Data Selecionada: {date.toLocaleDateString()}</Text>
+      <View style={styles.dateBox}>
+        <Text style={styles.dateText}>Data Selecionada:</Text>
+        <TouchableOpacity style={styles.dateContainer} onPress={setShowDatePicker}>
+          <AntDesign name="calendar" size={34} color="#333" />
+          <Text>{date.toLocaleDateString()}</Text>
+        </TouchableOpacity>
       </View>
 
       {showDatePicker && (
@@ -748,7 +820,7 @@ function MainTabs() {
                 backgroundColor: 'tomato',
                 justifyContent: 'center',
                 alignItems: 'center',
-                marginBottom: -20,
+                marginBottom: -10,
               }}>
                 <Ionicons name={iconName} size={50} color="white" />
               </View>
@@ -760,7 +832,7 @@ function MainTabs() {
         tabBarActiveTintColor: 'tomato',
         tabBarInactiveTintColor: 'gray',
         tabBarStyle: {
-          height: 70,
+          height: 60,
           paddingBottom: 10,
         },
         tabBarShowLabel: false,
@@ -786,15 +858,16 @@ const styles = StyleSheet.create({
   // Estilo geral da aplicação
   container: {
     flex: 1,
-    backgroundColor: '#1c1c1e', // Preto escuro para fundo geral
-    padding: 16,
+    backgroundColor: '#f2f2f2', // Light gray background
+    padding: 12,
+    flexDirection: 'column',
   },
 
   // Títulos principais
   title: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#ff6f00', // Laranja para título principal
+    color: '#c02942', // Deep red for main title
     marginBottom: 16,
     textAlign: 'center',
   },
@@ -803,42 +876,22 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#d4a373', // Tom de laranja mais suave
+    color: '#c02942', // Deep red for subtitles
     marginBottom: 12,
     textAlign: 'left',
   },
 
-  // Campo de entrada
-  input: {
-    borderWidth: 1,
-    borderColor: '#27ae60', // Verde escuro
-    borderRadius: 8,
-    padding: 12,
-    backgroundColor: '#d4a373',
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 5,
-    elevation: 3,
-  },
-
-  // Campo de seleção
-  picker: {
-    height: 50,
+  periodContainer: {
+    marginBottom: -8,
+    marginTop: -14,
     width: '100%',
-    borderColor: '#27ae60',
-    borderWidth: 1,
-    borderRadius: 8,
-    marginBottom: 12,
-    backgroundColor: '#d4a373',
+    padding: 8,
   },
 
-  // Botões
-  button: {
-    backgroundColor: '#1e7e34', // Verde escuro para botões
-    padding: 12,
-    borderRadius: 25, // Bordas arredondadas para visual moderno
+  adicionarButton: {
+    backgroundColor: 'green', // Deep red for buttons
+    padding: 15, // Adjust padding for button size preference
+    borderRadius: 25,
     alignItems: 'center',
     marginVertical: 12,
     shadowColor: '#000',
@@ -847,116 +900,147 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 5,
   },
-  buttonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
 
-  // Estilos dos títulos de gráficos
-  chartTitle: {
-    fontSize: 20,
+  periodTitle: {
+    fontSize: 18,
     fontWeight: 'bold',
-    color: '#ff6f00',
-    marginTop: 20,
-    marginBottom: 10,
+    marginBottom: 8,
+    color: '#c02942',
     textAlign: 'center',
   },
 
-  // Estilos dos gráficos
-  chart: {
-    marginVertical: 10,
-    borderRadius: 15,
-    backgroundColor: '#2b2b2d', // Fundo cinza escuro para gráficos
-    padding: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 6,
+  timeInputContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
   },
 
-  // Estilo para listagem de informações
-  listItem: {
-    backgroundColor: '#333',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 8,
+  // Campo de entrada
+  input: {
+    borderWidth: 1,
+    borderColor: '#c02942', // Deep red border
+    borderRadius: 8,
+    padding: 8,
+    backgroundColor: '#fff', // White background
+    marginBottom: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 5,
     elevation: 3,
   },
-  listItemText: {
-    fontSize: 16,
-    color: '#fff',
-  },
 
-  // Estilo para o campo de nome do cliente
-  inputField: {
+  // Campo de seleção (if applicable)
+  picker: {
+    height: 50,
+    width: '100%',
+    borderColor: '#c02942',
     borderWidth: 1,
-    borderColor: '#27ae60',
     borderRadius: 8,
-    padding: 10,
-    backgroundColor: '#fff',
     marginBottom: 12,
+    backgroundColor: '#fff',
   },
 
-  // Estilos para relatórios e gráficos
-  reportSection: {
-    marginTop: 20,
-    paddingHorizontal: 16,
-    backgroundColor: '#2b2b2d',
-    borderRadius: 15,
-    padding: 16,
+  // Botões
+  button: {
+    backgroundColor: '#c02942', // Deep red for buttons
+    padding: 15, // Adjust padding for button size preference
+    borderRadius: 25,
+    alignItems: 'center',
+    marginVertical: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 5,
-    elevation: 6,
-  },
-  reportText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#ff6f00',
-    marginBottom: 8,
+    elevation: 5,
   },
 
-  // Estilos para os botões de agendamento
-  appointmentButtons: {
+  buttonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+
+  // Estilo para listagem de informações
+  listItem: {
+    borderWidth: 1,
+    backgroundColor: '#f5f5f5', // Light gray background
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 8,
+    display: 'flex',
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+
+  removeButton: {
+    backgroundColor: '#c02942', // Deep red for "remove" button
+    padding: 8,
+    borderRadius: 8,
+  },
+
+  listItemText: {
+    fontSize: 16,
+    color: '#333', // Dark gray text
+  },
+
+  // Estilo para o campo de nome do cliente (if applicable)
+  inputField: {
+    borderWidth: 1,
+    borderColor: '#c02942',
+    borderRadius: 8,
+    padding: 12,
+    backgroundColor: '#fff',
+    marginBottom: 12,
+  },
+
+  // Estilo para listagem de informações (appointments)
+  appointment: {
+    borderWidth: 1,
+    backgroundColor: '#f5f5f5', // Light gray background
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 8,
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+
+  appointmentText: {
+    fontSize: 16,
+    color: '#333', // Dark gray text
+  },
+
+  moreInfo: {
+    fontSize: 14,
+    color: '#c02942', // Deep red for "more info" text
+  },
+
+  appointmentButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
     marginTop: 8,
   },
 
-  // Estilo para a seleção de data
+  // Estilo para data selecionada
   dateContainer: {
-    marginVertical: 10,
     alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#d4a373',
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 6,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 10,
+    padding: 3,
+    marginBottom: 10,
   },
 
-  // Estilo para as mensagens informativas
-  moreInfo: {
-    color: '#1e7e34',
-    fontWeight: 'bold',
-  },
-
-  // Estilo para o cabeçalho dos gráficos
-  graphHeader: {
-    backgroundColor: '#333',
-    padding: 10,
+  dateBox: {
+    borderWidth: 1,
+    borderColor: '#ccc',
     borderRadius: 8,
-    marginBottom: 20,
-    color: '#ff6f00',
+    marginBottom: 3,
+  },
+
+  dateText: {
+    fontSize: 16,
+    textAlign: 'center', // Centraliza o texto
+    marginBottom: 5, // Adiciona um espaço abaixo do texto
   },
 });
-
