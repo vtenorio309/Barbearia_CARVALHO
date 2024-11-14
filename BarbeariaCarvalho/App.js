@@ -131,7 +131,9 @@ function AdminHomeScreen() {
         value={duration}
         onChangeText={setDuration}
       />
-      <Button title="Adicionar Serviço" onPress={addService} />
+      <TouchableOpacity style={styles.adicionarButton} onPress={addService}>
+        <Text style={styles.buttonText}>Adicionar Serviço</Text>
+      </TouchableOpacity>
       
       <Text style={styles.subtitle}>Serviços</Text>
       {servicesList.map((service, index) => (
@@ -146,11 +148,13 @@ function AdminHomeScreen() {
       {/* Adicionar Barbeiro */}
       <TextInput
         style={styles.input}
-        placeholder="Adicionar Barbeiro"
+        placeholder="Nome do Barbeiro"
         value={barber}
         onChangeText={setBarber}
       />
-      <Button title="Adicionar Barbeiro" onPress={addBarber} />
+      <TouchableOpacity style={styles.adicionarButton} onPress={addBarber}>
+        <Text style={styles.buttonText}>Adicionar Barbeiro</Text>
+      </TouchableOpacity>
       
       <Text style={styles.subtitle}>Barbeiros</Text>
       {barbersList.map((barber, index) => (
@@ -784,9 +788,15 @@ function UserHomeScreen() {
           <Text>{`${appointment.clientName} às ${appointment.time}`}</Text>
           <Text style={styles.moreInfo}> {'>'} Ver mais informações </Text>
           <View style={styles.appointmentButtons}>
-            <Button title="Passar Fila" onPress={() => handlePassQueue(appointment.id)} />
-            <Button title="Remover" onPress={() => handleRemoveAppointment(appointment.id)} />
-            <Button title="Concluir" onPress={() => handleCompleteAppointment(appointment.id)} />
+          <TouchableOpacity style={styles.agendButton} onPress={() => handlePassQueue(appointment.id)}>
+            <Text style={styles.buttonText}>Passar Fila</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.agendButton} onPress={() => handleRemoveAppointment(appointment.id)}>
+            <Text style={styles.buttonText}>Remover</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.agendButton} onPress={() => handleCompleteAppointment(appointment.id)}>
+            <Text style={styles.buttonText}>Concluir</Text>
+          </TouchableOpacity>
           </View>
         </View>
       ))}
@@ -955,7 +965,7 @@ const styles = StyleSheet.create({
   },
 
   buttonText: {
-    color: '#fff',
+    color: '#FFFFFF',
     fontWeight: 'bold',
     fontSize: 16,
   },
@@ -1015,6 +1025,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#c02942', // Deep red for "more info" text
   },
+
+    // Estilo para os botões de ação
+    agendButton: {
+      backgroundColor: '#64B5F6', // cor principal para os botões
+      paddingVertical: 10,
+      paddingHorizontal: 16,
+      marginVertical: 5,
+      borderRadius: 8,
+      alignItems: 'center',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.2,
+      shadowRadius: 1.5,
+      elevation: 3,
+    },
 
   appointmentButtons: {
     flexDirection: 'row',
