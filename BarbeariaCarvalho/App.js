@@ -4,11 +4,11 @@ import { NavigationContainer } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
 import { Ionicons, AntDesign } from '@expo/vector-icons';
-import { View, Text, TextInput, Button, TouchableOpacity, ScrollView, StyleSheet, Alert} from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Alert} from 'react-native';
 import { LineChart, BarChart, PieChart } from 'react-native-chart-kit'; // Para os gráficos
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as FileSystem from 'expo-file-system';
-import * as SQlite from 'expo-sqlite/legacy';
+import AsyncStorage from 'expo-sqlite/kv-store';
+import * as FileSystem from 'expo-file-system'; // Para manipulação de arquivos
+import * as SQLite from 'expo-sqlite';
 
 
 function AdminHomeScreen() {
@@ -418,10 +418,11 @@ const AdminReportScreen = () => {
   );
 };
 
-const db = SQlite.openDatabase('barbearia.db');
+const db = await SQLite.openDatabaseAsync('barbearia.db');
 
 // Tela de agendamentos para usuários
 function UserHomeScreen() {
+  const [db, setDb] = useState(null);
   const [clientName, setClientName] = useState('');
   const [appointments, setAppointments] = useState([]);
   const [selectedService, setSelectedService] = useState('');
@@ -436,34 +437,58 @@ function UserHomeScreen() {
   const [date, setDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
 
+  async function setupDatabase() {
+    try {
+      await db.transaction(async tx => {
+        await tx.executeSql(
+          `CREATE TABLE IF NOT EXISTS appointments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            clientName TEXT,
+            day INTEGER,
+            month INTEGER,
+            year INTEGER,
+            time TEXT,
+            period TEXT,
+            service TEXT,
+            barber TEXT,
+            price REAL,
+            concluido BOOLEAN DEFAULT 0
+          );`,
+          []
+        );
+      });
+      console.log("Tabela 'appointments' criada com sucesso.");
+    } catch (error) {
+      console.error("Erro ao criar a tabela:", error);
+    }
+  }
+
   useEffect(() => {
     setupDatabase();
+    loadAppointments();
     loadData();
-    fetchAppointments();
   }, []);
 
-  const setupDatabase = () => {
-    db.transaction(tx => {
-      tx.executeSql(
-        `CREATE TABLE IF NOT EXISTS appointments (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          clientName TEXT,
-          day INTEGER,
-          month INTEGER,
-          year INTEGER,
-          time TEXT,
-          period TEXT,
-          service TEXT,
-          barber TEXT,
-          price REAL,
-          concluido BOOLEAN DEFAULT 0
-        );`,
-        [],
-        () => console.log("Tabela 'appointments' criada com sucesso."),
-        (_, error) => console.error("Erro ao criar a tabela:", error)
-      );
-    });
-  };
+    // Função para carregar agendamentos do banco de dados
+    const loadAppointments = async () => {
+      try {
+        await db.transaction(tx => {
+          tx.executeSql(
+            'SELECT * FROM appointments WHERE concluido = 0 ORDER BY time ASC;',
+            [],
+            (_, { rows: { _array } }) => {
+              setAppointments(_array);
+              setQueue(sortQueue(_array));
+            },
+            (_, error) => {
+              console.error('Error fetching appointments:', error);
+            }
+          );
+        });
+      } catch (error) {
+        console.error('Error fetching appointments:', error);
+      }
+    };
 
   const loadData = () => {
     AsyncStorage.getItem('services')
@@ -501,21 +526,6 @@ function UserHomeScreen() {
  // }, []);
 //
 
-  const fetchAppointments = () => {
-    db.transaction(tx => {
-      tx.executeSql(
-        "SELECT * FROM appointments WHERE concluido = 0;",
-        [],
-        (_, { rows }) => {
-          const appointmentsList = rows._array;
-          setAppointments(appointmentsList);
-          setQueue(sortQueue(appointmentsList));
-        },
-        (_, error) => console.error("Erro ao buscar agendamentos:", error)
-      );
-    });
-  };
-
   const handleCompleteAppointment = (appointmentId) => {
     if (!appointmentId) {
       console.error("ID do agendamento inválido");
@@ -529,9 +539,6 @@ function UserHomeScreen() {
         [appointmentId],
         () => {
           console.log('Agendamento concluído com sucesso');
-  
-          // Recarrega a lista de agendamentos
-          fetchAppointments();
         },
         (_txObj, error) => console.error('Erro ao concluir serviço', error)
       );
@@ -544,39 +551,41 @@ function UserHomeScreen() {
     const service = servicesList.find(s => s.name === selectedService);
     const periodDetails = periods.find(p => p.label === selectedPeriod);
     if (!service || !periodDetails) return;
-
+  
     const serviceDuration = parseInt(service.duration, 10);
     const { start, end } = periodDetails;
-
+  
     const startHour = parseInt(start.split(':')[0], 10);
     const startMinute = parseInt(start.split(':')[1], 10);
     const endHour = parseInt(end.split(':')[0], 10);
     const endMinute = parseInt(end.split(':')[1], 10);
-
+  
     let availableSlots = [];
     let currentHour = startHour;
     let currentMinute = startMinute;
-
+  
     while (currentHour < endHour || (currentHour === endHour && currentMinute < endMinute)) {
       const time = `${currentHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')}`;
-      const isOccupied = appointments.some(app => 
-        app.period === selectedPeriod &&
-        app.day === date.getDate() &&
-        app.month === date.getMonth() + 1 &&
-        app.year === date.getFullYear() &&
-        app.time === time
-      );
-
+  
+      // Check if appointment already exists at this time
+      const isOccupied = appointments.some(appointment => {
+        const appointmentHour = parseInt(appointment.time.split(':')[0], 10);
+        const appointmentMinute = parseInt(appointment.time.split(':')[1], 10);
+        return (appointmentHour === currentHour && appointmentMinute === currentMinute);
+      });
+  
       if (!isOccupied) {
         availableSlots.push(time);
       }
-
+  
+      // Increment time based on service duration (adjust for minute increments)
       currentMinute += serviceDuration;
       if (currentMinute >= 60) {
-        currentHour += 1;
         currentMinute -= 60;
+        currentHour++;
       }
     }
+  
     setAvailableTimes(availableSlots);
   };
 
@@ -584,7 +593,7 @@ function UserHomeScreen() {
     calculateAvailableTimes();
   }, [selectedService, selectedPeriod, date]);
 
-  const handleSchedule = () => {
+  const handleSchedule = async () => {
     if (clientName && selectedService && selectedBarber && selectedPeriod && selectedTime) {
       const newAppointment = {
         clientName,
@@ -597,29 +606,42 @@ function UserHomeScreen() {
         year: date.getFullYear(),
         concluido: 0,
       };
-
-      db.transaction(tx => {
-        tx.executeSql(
-          `INSERT INTO appointments (clientName, service, barber, period, time, day, month, year, concluido) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [clientName, selectedService, selectedBarber, selectedPeriod, selectedTime, newAppointment.day, newAppointment.month, newAppointment.year, 0],
-          (_, result) => {
-            fetchAppointments();
-            setAppointments([...appointments, { id: result.insertId, ...newAppointment }]);
-            setQueue(sortQueue([...queue, newAppointment]));
-          },
-          (_, error) => console.error('Erro ao inserir agendamento', error)
-        );
-      });
-
-      setClientName('');
-      setSelectedService('');
-      setSelectedBarber('');
-      setSelectedPeriod('');
-      setSelectedTime('');
+  
+      try {
+        // Open database connection (handle potential errors)
+        const db = await SQLite.openDatabaseAsync('appointments.db');
+  
+        // Execute SQL statement with async/await for clarity
+        await db.transactionAsync(tx => {
+          tx.executeSql(
+            `INSERT INTO appointments (clientName, service, barber, period, time, day, month, year, concluido) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [clientName, selectedService, selectedBarber, selectedPeriod, selectedTime, newAppointment.day, newAppointment.month, newAppointment.year, 0]
+          );
+        });
+        // Update appointments state with the new appointment
+        setAppointments([...appointments, { id: result.insertId, ...newAppointment }]);
+  
+        // Update queue state if applicable (modify if needed)
+        setQueue(sortQueue([...queue, newAppointment]));
+  
+        // Clear user input fields
+        setClientName('');
+        setSelectedService('');
+        setSelectedBarber('');
+        setSelectedPeriod('');
+        setSelectedTime('');
+      } catch (error) {
+        console.error('Error inserting appointment:', error);
+        // Handle errors appropriately (e.g., display an alert message)
+      } finally {
+        // Close database connection (optional for Expo SQLite)
+        // db.close(); // Consider closing if needed for specific use cases
+      }
     } else {
       alert("Por favor, preencha todos os campos antes de marcar.");
     }
   };
+  
 
   const sortQueue = (queue) => {
     return [...queue].sort((a, b) => {
@@ -643,51 +665,32 @@ function UserHomeScreen() {
     });
   };
 
-  const handleRemoveAppointment = (index) => {
+  const handleRemoveAppointment = async (index) => {
     const appointmentToRemove = appointments[index];
-  
-    // Verifica se o agendamento a ser removido existe
     if (!appointmentToRemove || !appointmentToRemove.id) {
       console.error('Agendamento não encontrado ou ID inválido');
       return;
     }
   
-    // Alerta de confirmação antes de remover o agendamento
     Alert.alert('Confirmação', 'Você tem certeza que deseja remover este agendamento?', [
       { text: 'Cancelar', style: 'cancel' },
       {
         text: 'Remover',
-        onPress: () => {
-          // Transação no banco de dados SQLite
-          db.transaction(
-            (tx) => {
+        onPress: async () => {
+          try {
+            await db.transactionAsync(tx => {
               tx.executeSql(
-                `DELETE FROM appointments WHERE id = ?`, // Query SQL
-                [appointmentToRemove.id], // Passando o ID do agendamento
-                (_, result) => {
-                  if (result.rowsAffected > 0) {
-                    console.log('Agendamento removido com sucesso');
-                    // Atualiza a lista de agendamentos e a fila removendo o agendamento
-                    setAppointments((prevAppointments) =>
-                      prevAppointments.filter((_, i) => i !== index)
-                    );
-                    setQueue((prevQueue) =>
-                      prevQueue.filter((_, i) => i !== index)
-                    );
-                  } else {
-                    console.error('Nenhum agendamento foi removido');
-                  }
-                },
-                (_, error) => {
-                  console.error('Erro ao remover agendamento', error);
-                  return false;
-                }
+                `DELETE FROM appointments WHERE id = ?`,
+                [appointmentToRemove.id]
               );
-            },
-            (error) => {
-              console.error('Erro na transação de remoção', error);
-            }
-          );
+            });
+            console.log('Agendamento removido com sucesso');
+            const updatedAppointments = appointments.filter((_, i) => i !== index);
+            setAppointments(updatedAppointments);
+            setQueue(sortQueue(updatedAppointments));
+          } catch (error) {
+            console.error('Erro ao remover agendamento', error);
+          }
         },
       },
     ]);
@@ -783,20 +786,20 @@ function UserHomeScreen() {
       </TouchableOpacity>
 
       <Text style={styles.subtitle}>Agendamentos</Text>
-      {appointments.map((appointment, _index) => (
+      {appointments.map((appointment) => (
         <View key={appointment.id} style={styles.appointment}>
           <Text>{`${appointment.clientName} às ${appointment.time}`}</Text>
           <Text style={styles.moreInfo}> {'>'} Ver mais informações </Text>
           <View style={styles.appointmentButtons}>
-          <TouchableOpacity style={styles.agendButton} onPress={() => handlePassQueue(appointment.id)}>
-            <Text style={styles.buttonText}>Passar Fila</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.agendButton} onPress={() => handleRemoveAppointment(appointment.id)}>
-            <Text style={styles.buttonText}>Remover</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.agendButton} onPress={() => handleCompleteAppointment(appointment.id)}>
-            <Text style={styles.buttonText}>Concluir</Text>
-          </TouchableOpacity>
+            <TouchableOpacity style={styles.agendButton} onPress={() => handlePassQueue(appointment.id)}>
+              <Text style={styles.buttonText}>Passar Fila</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.agendButton} onPress={() => handleRemoveAppointment(appointment.id)}>
+              <Text style={styles.buttonText}>Remover</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.agendButton} onPress={() => handleCompleteAppointment(appointment.id)}>
+              <Text style={styles.buttonText}>Concluir</Text>
+            </TouchableOpacity>
           </View>
         </View>
       ))}
