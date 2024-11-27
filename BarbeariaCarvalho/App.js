@@ -4,9 +4,9 @@ import { NavigationContainer } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
 import { Ionicons, AntDesign } from '@expo/vector-icons';
-import { View, Text, TextInput, Button, TouchableOpacity, ScrollView, StyleSheet, Alert} from 'react-native';
-import { LineChart, BarChart, PieChart } from 'react-native-chart-kit'; // Para os gráficos
+import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Alert} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { BarChart, PieChart } from "react-native-gifted-charts";
 import * as FileSystem from 'expo-file-system';
 import * as SQlite from 'expo-sqlite/legacy';
 
@@ -238,187 +238,194 @@ function AdminHomeScreen() {
   );  
 }
 
+const db = SQlite.openDatabase('barbearia.db');
 
 // === AdminReportScreen ===
 const AdminReportScreen = () => {
-  const [years, setYears] = useState([]);
-  const [barbers, setBarbers] = useState([]);
-  const [periods, setPeriods] = useState([]);
-  const [selectedYear, setSelectedYear] = useState('');
-  const [selectedBarber, setSelectedBarber] = useState('');
-  const [selectedPeriod, setSelectedPeriod] = useState('');
-  const [chartsData, setChartsData] = useState(null);
+  const [month, setMonth] = useState('Todos'); // Filtro de mês
+  const [year, setYear] = useState(new Date().getFullYear().toString()); // Filtro de ano
+  const [barber, setBarber] = useState('Todos'); // Filtro de barbeiro
+  const [service, setService] = useState('Todos'); // Filtro de serviço
+  const [barChartData, setBarChartData] = useState([]);
+  const [pieChartData, setPieChartData] = useState([]);
+  const [totalRevenue, setTotalRevenue] = useState(0);
+  const [barbersList, setBarbersList] = useState([]); // Lista de barbeiros
+  const [servicesList, setServicesList] = useState([]); // Lista de serviços
 
   useEffect(() => {
-    const loadFiltersAndData = async () => {
-      await loadUniqueFilterValues();
-      await updateChartData();
-    };
-    loadFiltersAndData();
-  }, [selectedYear, selectedBarber, selectedPeriod]);
+    loadBarbersAndServices(); // Carrega barbeiros e serviços do banco
+    loadReportData(); // Carrega dados para os gráficos
+  }, [month, year, barber, service]);
 
-  const loadUniqueFilterValues = async () => {
-    try {
-      const uniqueYears = await queryUniqueValues('year');
-      const uniqueBarbers = await queryUniqueValues('barber');
-      const uniquePeriods = await queryUniqueValues('period');
-      setYears(uniqueYears || []);
-      setBarbers(uniqueBarbers || []);
-      setPeriods(uniquePeriods || []);
-    } catch (error) {
-      console.error('Erro ao carregar filtros:', error);
-    }
-  };
+  // Função para carregar os barbeiros e serviços
+  const loadBarbersAndServices = () => {
+    db.transaction(tx => {
+      // Carregar barbeiros
+      tx.executeSql(
+        `SELECT DISTINCT barber FROM appointments`,
+        [],
+        (_, { rows }) => {
+          const barbers = rows._array.map(row => row.barber);
+          setBarbersList(['Todos', ...barbers]); // Adicionar "Todos" como opção padrão
+        }
+      );
 
-  const queryUniqueValues = (column) => {
-    return new Promise((resolve, reject) => {
-      db.transaction(tx => {
-        tx.executeSql(
-          `SELECT DISTINCT ${column} FROM appointments`,
-          [],
-          (_, { rows }) => resolve(rows._array.map(item => item[column])),
-          (_, error) => reject(error)
-        );
-      });
+      // Carregar serviços
+      tx.executeSql(
+        `SELECT DISTINCT service FROM appointments`,
+        [],
+        (_, { rows }) => {
+          const services = rows._array.map(row => row.service);
+          setServicesList(['Todos', ...services]); // Adicionar "Todos" como opção padrão
+        }
+      );
     });
   };
 
-  const updateChartData = async () => {
-    try {
-      const filteredData = await queryFilteredData();
-      if (filteredData.length === 0) {
-        setChartsData(null);
-        return;
+  // Função para carregar dados dos gráficos com base nos filtros
+  const loadReportData = () => {
+    db.transaction(tx => {
+      const filters = [];
+      let query = 'SELECT * FROM appointments WHERE 1=1';
+
+      if (month !== 'Todos') {
+        query += ' AND strftime("%m", date) = ?';
+        filters.push(month);
+      }
+      if (year !== 'Todos') {
+        query += ' AND strftime("%Y", date) = ?';
+        filters.push(year);
+      }
+      if (barber !== 'Todos') {
+        query += ' AND barber = ?';
+        filters.push(barber);
+      }
+      if (service !== 'Todos') {
+        query += ' AND service = ?';
+        filters.push(service);
       }
 
-      const totalRevenue = filteredData.reduce((sum, item) => sum + item.price, 0);
-      const totalClients = filteredData.length;
-
-      const servicePopularity = {};
-      const barberPerformance = {};
-      const periodDistribution = { Manhã: 0, Tarde: 0, Noite: 0 };
-
-      filteredData.forEach(item => {
-        servicePopularity[item.service] = (servicePopularity[item.service] || 0) + 1;
-        barberPerformance[item.barber] = (barberPerformance[item.barber] || 0) + 1;
-        periodDistribution[item.period] += 1;
-      });
-
-      setChartsData({
-        revenue: totalRevenue,
-        clients: totalClients,
-        popularService: Object.keys(servicePopularity).reduce((a, b) => servicePopularity[a] > servicePopularity[b] ? a : b),
-        servicePopularity,
-        barberPerformance,
-        periodDistribution
-      });
-    } catch (error) {
-      console.error('Erro ao atualizar os dados dos gráficos:', error);
-    }
-  };
-
-  const queryFilteredData = () => {
-    return new Promise((resolve, reject) => {
-      const filters = [];
-      if (selectedYear) filters.push(`year = ${selectedYear}`);
-      if (selectedBarber) filters.push(`barber = '${selectedBarber}'`);
-      if (selectedPeriod) filters.push(`period = '${selectedPeriod}'`);
-
-      const query = `SELECT * FROM appointments ${filters.length ? `WHERE ${filters.join(' AND ')}` : ''}`;
-      
-      db.transaction(tx => {
-        tx.executeSql(
-          query,
-          [],
-          (_, { rows }) => resolve(rows._array),
-          (_, error) => reject(error)
-        );
+      tx.executeSql(query, filters, (_, { rows }) => {
+        const data = rows._array;
+        processChartData(data); // Processar os dados para gráficos
       });
     });
+  };
+
+  // Processar dados para gráficos
+  const processChartData = data => {
+    const serviceCount = {};
+    const revenueByService = {};
+    const barberPopularity = {};
+
+    let total = 0;
+
+    data.forEach(item => {
+      // Serviço mais pedido
+      serviceCount[item.service] = (serviceCount[item.service] || 0) + 1;
+
+      // Faturamento total por serviço
+      revenueByService[item.service] = (revenueByService[item.service] || 0) + item.price;
+
+      // Barbeiro mais popular
+      barberPopularity[item.barber] = (barberPopularity[item.barber] || 0) + 1;
+
+      // Faturamento total
+      total += item.price;
+    });
+
+    // Atualiza o estado para os gráficos
+    setBarChartData(
+      Object.entries(serviceCount).map(([key, value]) => ({
+        value,
+        label: key,
+      }))
+    );
+
+    setPieChartData(
+      Object.entries(revenueByService).map(([key, value]) => ({
+        value,
+        label: key,
+      }))
+    );
+
+    setTotalRevenue(total);
   };
 
   return (
-    <ScrollView style={{ padding: 20 }}>
-      <Text style={{ fontSize: 20, fontWeight: 'bold' }}>Relatórios da Barbearia</Text>
-
-      <Text style={{ marginTop: 10 }}>Ano:</Text>
-      <Picker selectedValue={selectedYear} onValueChange={setSelectedYear}>
-        <Picker.Item label="Selecione o Ano" value="" />
-        {years.map(year => <Picker.Item key={year} label={year.toString()} value={year.toString()} />)}
-      </Picker>
-
-      <Text style={{ marginTop: 10 }}>Barbeiro:</Text>
-      <Picker selectedValue={selectedBarber} onValueChange={setSelectedBarber}>
-        <Picker.Item label="Selecione o Barbeiro" value="" />
-        {barbers.map(barber => <Picker.Item key={barber} label={barber} value={barber} />)}
-      </Picker>
-
-      <Text style={{ marginTop: 10 }}>Período:</Text>
-      <Picker selectedValue={selectedPeriod} onValueChange={setSelectedPeriod}>
-        <Picker.Item label="Selecione o Período" value="" />
-        {periods.map(period => <Picker.Item key={period} label={period} value={period} />)}
-      </Picker>
-
-      {chartsData ? (
-        <View style={{ marginTop: 20 }}>
-          <Text>Faturamento Total: R${chartsData.revenue.toFixed(2)}</Text>
-          <Text>Total de Clientes: {chartsData.clients}</Text>
-          <Text>Serviço Mais Popular: {chartsData.popularService}</Text>
-
-          <BarChart
-            data={{
-              labels: Object.keys(chartsData.servicePopularity),
-              datasets: [{ data: Object.values(chartsData.servicePopularity) }],
-            }}
-            width={300}
-            height={220}
-            chartConfig={{
-              backgroundGradientFrom: '#FB8C00',
-              backgroundGradientTo: '#FFA726',
-              color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
-            }}
-          />
-
-          <PieChart
-            data={Object.keys(chartsData.barberPerformance).map((barber, index) => ({
-              name: barber,
-              population: chartsData.barberPerformance[barber],
-              color: ['#F39C12', '#3498DB', '#2ECC71'][index % 3],
-              legendFontColor: '#7F8C8D',
-              legendFontSize: 15,
-            }))}
-            width={300}
-            height={220}
-            chartConfig={{
-              color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
-            }}
-            accessor="population"
-            backgroundColor="transparent"
-            paddingLeft="15"
-          />
-
-          <LineChart
-            data={{
-              labels: Object.keys(chartsData.periodDistribution),
-              datasets: [{ data: Object.values(chartsData.periodDistribution) }],
-            }}
-            width={300}
-            height={220}
-            chartConfig={{
-              backgroundGradientFrom: '#022173',
-              backgroundGradientTo: '#1E2923',
-              color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
-            }}
-          />
+    <ScrollView style={styles.container}>
+      {/* Filtros */}
+      <View style={styles.filters}>
+        <View style={styles.filterItem}>
+          <Text>Mês:</Text>
+          <Picker selectedValue={month} onValueChange={value => setMonth(value)}>
+            <Picker.Item label="Todos" value="Todos" />
+            {Array.from({ length: 12 }, (_, i) => {
+              const month = (i + 1).toString().padStart(2, '0');
+              return <Picker.Item key={month} label={month} value={month} />;
+            })}
+          </Picker>
         </View>
-      ) : (
-        <Text style={{ marginTop: 20 }}>Nenhum dado disponível para exibir no momento.</Text>
-      )}
+
+        <View style={styles.filterItem}>
+          <Text>Ano:</Text>
+          <Picker selectedValue={year} onValueChange={value => setYear(value)}>
+            <Picker.Item label="Todos" value="Todos" />
+            {[...Array(5)].map((_, i) => {
+              const currentYear = new Date().getFullYear() - i;
+              return <Picker.Item key={currentYear} label={currentYear.toString()} value={currentYear.toString()} />;
+            })}
+          </Picker>
+        </View>
+
+        <View style={styles.filterItem}>
+          <Text>Barbeiro:</Text>
+          <Picker selectedValue={barber} onValueChange={value => setBarber(value)}>
+            {barbersList.map((barber, index) => (
+              <Picker.Item key={index} label={barber} value={barber} />
+            ))}
+          </Picker>
+        </View>
+
+        <View style={styles.filterItem}>
+          <Text>Serviço:</Text>
+          <Picker selectedValue={service} onValueChange={value => setService(value)}>
+            {servicesList.map((service, index) => (
+              <Picker.Item key={index} label={service} value={service} />
+            ))}
+          </Picker>
+        </View>
+      </View>
+
+      {/* Gráficos */}
+      <View>
+        <Text style={styles.chartTitle}>Serviço Mais Pedido</Text>
+        <BarChart
+          data={barChartData}
+          barWidth={30}
+          spacing={10}
+          roundedTop
+          noOfSections={4}
+          maxValue={Math.max(...barChartData.map(d => d.value), 100)}
+        />
+
+        <Text style={styles.chartTitle}>Faturamento por Serviço</Text>
+        <PieChart
+          data={pieChartData}
+          donut
+          showText
+          textColor="black"
+          radius={100}
+          innerRadius={50}
+          textSize={10}
+          textBackgroundColor="white"
+        />
+
+        <Text style={styles.totalRevenue}>Faturamento Total: R$ {totalRevenue.toFixed(2)}</Text>
+      </View>
     </ScrollView>
   );
 };
-
-const db = SQlite.openDatabase('barbearia.db');
 
 // Tela de agendamentos para usuários
 function UserHomeScreen() {
@@ -428,7 +435,6 @@ function UserHomeScreen() {
   const [selectedBarber, setSelectedBarber] = useState('');
   const [selectedPeriod, setSelectedPeriod] = useState('');
   const [selectedTime, setSelectedTime] = useState('');
-  const [queue, setQueue] = useState([]);
   const [servicesList, setServicesList] = useState([]);
   const [barbersList, setBarbersList] = useState([]);
   const [periods, setPeriods] = useState(['Manhã', 'Tarde', 'Noite']);
@@ -456,7 +462,7 @@ function UserHomeScreen() {
           service TEXT,
           barber TEXT,
           price REAL,
-          concluido BOOLEAN DEFAULT 0
+          concluido INTEGER DEFAULT 0
         );`,
         [],
         () => console.log("Tabela 'appointments' criada com sucesso."),
@@ -464,6 +470,23 @@ function UserHomeScreen() {
       );
     });
   };
+
+  const fetchAppointments = () => {
+    db.transaction(tx => {
+      tx.executeSql(
+        `SELECT * FROM appointments 
+         WHERE concluido = 0 
+         ORDER BY year ASC, month ASC, day ASC, time ASC`,
+        [],
+        (_, { rows }) => {
+          console.log("Agendamentos atualizados (ordenados):", rows._array);
+          setAppointments(rows._array || []);
+        },
+        (_, error) => console.error("Erro ao buscar agendamentos:", error)
+      );
+    });
+  };
+  
 
   const loadData = () => {
     AsyncStorage.getItem('services')
@@ -491,54 +514,94 @@ function UserHomeScreen() {
       })
       .catch(e => console.error("Erro ao carregar horários", e));
   };
-//
+
  // useEffect(() => {
-  //  db.transaction((tx) => {
-   //   tx.executeSql('SELECT * FROM appointments', [], (_, { rows }) => {
-   //     console.log('Dados do banco de dados:', rows._array);
-   //   });
-   // });
- // }, []);
-//
+   // db.transaction((tx) => {
+     // tx.executeSql('SELECT * FROM appointments', [], (_, { rows }) => {
+     //  console.log('Dados do banco de dados:', rows._array);
+     // });
+  // });
+ //}, []);
 
-  const fetchAppointments = () => {
-    db.transaction(tx => {
-      tx.executeSql(
-        "SELECT * FROM appointments WHERE concluido = 0;",
-        [],
-        (_, { rows }) => {
-          const appointmentsList = rows._array;
-          setAppointments(appointmentsList);
-          setQueue(sortQueue(appointmentsList));
-        },
-        (_, error) => console.error("Erro ao buscar agendamentos:", error)
-      );
-    });
-  };
 
-  const handleCompleteAppointment = (appointmentId) => {
-    if (!appointmentId) {
-      console.error("ID do agendamento inválido");
-      return;
-    }
-  
-    // Atualizar o agendamento existente para "concluído"
-    db.transaction(tx => {
+ useEffect(() => {
+  console.log("Agendamentos atuais:", appointments);
+}, [appointments]);
+
+const handleCompleteAppointment = (id) => {
+  console.log("Tentando concluir agendamento com ID:", id);
+
+  db.transaction(
+    (tx) => {
       tx.executeSql(
         `UPDATE appointments SET concluido = 1 WHERE id = ?`,
-        [appointmentId],
-        () => {
-          console.log('Agendamento concluído com sucesso');
-  
-          // Recarrega a lista de agendamentos
-          fetchAppointments();
-        },
-        (_txObj, error) => console.error('Erro ao concluir serviço', error)
-      );
-    });
-  };
-  
+        [id],
+        (_, result) => {
+          console.log("Resultado do UPDATE:", result);
+          if (result.rowsAffected > 0) {
+            console.log("Agendamento marcado como concluído no banco.");
 
+            // Atualizar lista de agendamentos no estado
+            tx.executeSql(
+              `SELECT * FROM appointments WHERE concluido = 0`,
+              [],
+              (_, { rows }) => {
+                const updatedAppointments = rows._array || [];
+                console.log("Lista de agendamentos atualizada (não concluídos):", updatedAppointments);
+                setAppointments(updatedAppointments);
+                fetchAppointments();
+              },
+              (_, error) => console.error("Erro ao buscar agendamentos atualizados:", error)
+            );
+          } else {
+            console.error("Nenhum agendamento encontrado para concluir.");
+          }
+        },
+        (_, error) => console.error("Erro ao executar UPDATE:", error)
+      );
+    },
+    (error) => console.error("Erro na transação de conclusão:", error),
+    () => console.log("Transação de conclusão finalizada com sucesso.")
+  );
+};
+
+const handleRemoveAppointment = (id) => {
+  console.log("Tentando remover agendamento com ID:", id);
+
+  db.transaction(
+    (tx) => {
+      tx.executeSql(
+        `DELETE FROM appointments WHERE id = ?`,
+        [id],
+        (_, result) => {
+          console.log("Resultado do DELETE:", result);
+          if (result.rowsAffected > 0) {
+            console.log("Agendamento removido do banco com sucesso.");
+
+            // Atualizar lista de agendamentos no estado
+            tx.executeSql(
+              `SELECT * FROM appointments WHERE concluido = 0`,
+              [],
+              (_, { rows }) => {
+                const updatedAppointments = rows._array || [];
+                console.log("Lista de agendamentos atualizada (não concluídos):", updatedAppointments);
+                setAppointments(updatedAppointments);
+                fetchAppointments();
+              },
+              (_, error) => console.error("Erro ao buscar agendamentos atualizados:", error)
+            );
+          } else {
+            console.error("Nenhum agendamento encontrado para remover.");
+          }
+        },
+        (_, error) => console.error("Erro ao executar DELETE:", error)
+      );
+    },
+    (error) => console.error("Erro na transação de remoção:", error),
+    () => console.log("Transação de remoção concluída com sucesso.")
+  );
+};
+  
   const calculateAvailableTimes = () => {
     if (!selectedService || !selectedPeriod) return;
     const service = servicesList.find(s => s.name === selectedService);
@@ -605,11 +668,11 @@ function UserHomeScreen() {
           (_, result) => {
             fetchAppointments();
             setAppointments([...appointments, { id: result.insertId, ...newAppointment }]);
-            setQueue(sortQueue([...queue, newAppointment]));
           },
           (_, error) => console.error('Erro ao inserir agendamento', error)
         );
       });
+      
 
       setClientName('');
       setSelectedService('');
@@ -620,107 +683,6 @@ function UserHomeScreen() {
       alert("Por favor, preencha todos os campos antes de marcar.");
     }
   };
-
-  const sortQueue = (queue) => {
-    return [...queue].sort((a, b) => {
-      const dateA = new Date(a.year, a.month - 1, a.day, ...a.time.split(':').map(Number));
-      const dateB = new Date(b.year, b.month - 1, b.day, ...b.time.split(':').map(Number));
-  
-      // Comparar pela data (ano, mês, dia)
-      if (dateA < dateB) return -1;
-      if (dateA > dateB) return 1;
-  
-      // Se as datas forem iguais, comparar pelo período ("Manhã" < "Tarde" < "Noite")
-      const periodOrder = { 'Manhã': 1, 'Tarde': 2, 'Noite': 3 };
-      if (periodOrder[a.period] !== periodOrder[b.period]) {
-        return periodOrder[a.period] - periodOrder[b.period];
-      }
-  
-      // Se data e período forem iguais, comparar pela hora (HH:MM)
-      const timeA = parseInt(a.time.split(':')[0], 10) * 60 + parseInt(a.time.split(':')[1], 10);
-      const timeB = parseInt(b.time.split(':')[0], 10) * 60 + parseInt(b.time.split(':')[1], 10);
-      return timeA - timeB;
-    });
-  };
-
-  const handleRemoveAppointment = (index) => {
-    const appointmentToRemove = appointments[index];
-  
-    // Verifica se o agendamento a ser removido existe
-    if (!appointmentToRemove || !appointmentToRemove.id) {
-      console.error('Agendamento não encontrado ou ID inválido');
-      return;
-    }
-  
-    // Alerta de confirmação antes de remover o agendamento
-    Alert.alert('Confirmação', 'Você tem certeza que deseja remover este agendamento?', [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Remover',
-        onPress: () => {
-          // Transação no banco de dados SQLite
-          db.transaction(
-            (tx) => {
-              tx.executeSql(
-                `DELETE FROM appointments WHERE id = ?`, // Query SQL
-                [appointmentToRemove.id], // Passando o ID do agendamento
-                (_, result) => {
-                  if (result.rowsAffected > 0) {
-                    console.log('Agendamento removido com sucesso');
-                    // Atualiza a lista de agendamentos e a fila removendo o agendamento
-                    setAppointments((prevAppointments) =>
-                      prevAppointments.filter((_, i) => i !== index)
-                    );
-                    setQueue((prevQueue) =>
-                      prevQueue.filter((_, i) => i !== index)
-                    );
-                  } else {
-                    console.error('Nenhum agendamento foi removido');
-                  }
-                },
-                (_, error) => {
-                  console.error('Erro ao remover agendamento', error);
-                  return false;
-                }
-              );
-            },
-            (error) => {
-              console.error('Erro na transação de remoção', error);
-            }
-          );
-        },
-      },
-    ]);
-  };
-  
-
-  // Função para passar a vez
-  const handlePassQueue = () => {
-    if (queue.length > 1) {
-      setQueue((prevQueue) => {
-        const newQueue = [...prevQueue];
-        
-        // Pega o primeiro e o segundo cliente na fila
-        const firstClient = { ...newQueue[0] };
-        const secondClient = { ...newQueue[1] };
-  
-        // O primeiro cliente assume o horário do segundo
-        firstClient.time = secondClient.time;
-  
-        // O segundo cliente assume o horário do primeiro
-        secondClient.time = calculateNextAvailableSlot(secondClient.time, parseInt(firstClient.service.duration));
-  
-        // Atualiza a fila com os novos horários
-        newQueue[0] = firstClient;
-        newQueue[1] = secondClient;
-  
-        // Reordena a fila para manter a ordem correta
-        return sortQueue(newQueue);
-      });
-    } else {
-      alert('Não há mais clientes na fila para passar a vez.');
-    }
-  };  
 
   return (
     <ScrollView style={styles.container}>
@@ -788,7 +750,7 @@ function UserHomeScreen() {
           <Text>{`${appointment.clientName} às ${appointment.time}`}</Text>
           <Text style={styles.moreInfo}> {'>'} Ver mais informações </Text>
           <View style={styles.appointmentButtons}>
-          <TouchableOpacity style={styles.agendButton} onPress={() => handlePassQueue(appointment.id)}>
+          <TouchableOpacity style={styles.agendButton} onPress={() => null(appointment.id)}>
             <Text style={styles.buttonText}>Passar Fila</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.agendButton} onPress={() => handleRemoveAppointment(appointment.id)}>
@@ -1067,5 +1029,26 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center', // Centraliza o texto
     marginBottom: 5, // Adiciona um espaço abaixo do texto
+  },
+  filters: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 20,
+  },
+  filterItem: {
+    width: '50%',
+    padding: 10,
+  },
+  chartTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginTop: 20,
+    textAlign: 'center',
+  },
+  totalRevenue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginTop: 10,
   },
 });

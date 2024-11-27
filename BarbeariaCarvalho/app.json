@@ -1,5 +1,6 @@
 {
   "expo": {
+    "newArchEnabled": false,
     "name": "barbeariacarvalho",
     "slug": "barbeariacarvalho",
     "version": "1.2.9",
