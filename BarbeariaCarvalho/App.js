@@ -6,7 +6,7 @@ import { Picker } from '@react-native-picker/picker';
 import { Ionicons, AntDesign } from '@expo/vector-icons';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Alert} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { BarChart, PieChart } from "react-native-gifted-charts";
+import { BarChart, LineChart, PieChart } from "react-native-gifted-charts";
 import * as FileSystem from 'expo-file-system';
 import * as SQlite from 'expo-sqlite/legacy';
 
@@ -55,15 +55,18 @@ function AdminHomeScreen() {
   };
 
   const addService = () => {
-    if (service && price && duration) {
-      const newService = { name: service, price, duration };
+    // Certifique-se de que `price` seja convertido em número
+    const parsedPrice = parseFloat(price);
+  
+    if (service && !isNaN(parsedPrice) && duration) {
+      const newService = { name: service, price: parsedPrice, duration };
       setServicesList([...servicesList, newService]);
       setService('');
       setPrice('');
       setDuration('');
-      saveData();
+      saveData(); // Salva os dados no banco
     } else {
-      Alert.alert('Erro', 'Preencha todos os campos do serviço');
+      Alert.alert('Erro', 'Preencha todos os campos corretamente.');
     }
   };
 
@@ -122,7 +125,7 @@ function AdminHomeScreen() {
         placeholder="Preço do Serviço"
         keyboardType="numeric"
         value={price}
-        onChangeText={setPrice}
+        onChangeText={setPrice} // Mantém o valor como string
       />
       <TextInput
         style={styles.input}
@@ -246,18 +249,18 @@ const AdminReportScreen = () => {
   const [year, setYear] = useState(new Date().getFullYear().toString()); // Filtro de ano
   const [barber, setBarber] = useState('Todos'); // Filtro de barbeiro
   const [service, setService] = useState('Todos'); // Filtro de serviço
-  const [barChartData, setBarChartData] = useState([]);
-  const [pieChartData, setPieChartData] = useState([]);
-  const [totalRevenue, setTotalRevenue] = useState(0);
   const [barbersList, setBarbersList] = useState([]); // Lista de barbeiros
   const [servicesList, setServicesList] = useState([]); // Lista de serviços
+  const [barChartData, setBarChartData] = useState([]);
+  const [lineChartData, setLineChartData] = useState([]);
+  const [pieChartData, setPieChartData] = useState([]);
+  const [totalRevenue, setTotalRevenue] = useState(0);
 
   useEffect(() => {
-    loadBarbersAndServices(); // Carrega barbeiros e serviços do banco
-    loadReportData(); // Carrega dados para os gráficos
+    loadBarbersAndServices(); // Carregar barbeiros e serviços
+    loadReportData(); // Carregar dados para os gráficos
   }, [month, year, barber, service]);
 
-  // Função para carregar os barbeiros e serviços
   const loadBarbersAndServices = () => {
     db.transaction(tx => {
       // Carregar barbeiros
@@ -266,7 +269,7 @@ const AdminReportScreen = () => {
         [],
         (_, { rows }) => {
           const barbers = rows._array.map(row => row.barber);
-          setBarbersList(['Todos', ...barbers]); // Adicionar "Todos" como opção padrão
+          setBarbersList(['Todos', ...barbers]);
         }
       );
 
@@ -276,13 +279,12 @@ const AdminReportScreen = () => {
         [],
         (_, { rows }) => {
           const services = rows._array.map(row => row.service);
-          setServicesList(['Todos', ...services]); // Adicionar "Todos" como opção padrão
+          setServicesList(['Todos', ...services]);
         }
       );
     });
   };
 
-  // Função para carregar dados dos gráficos com base nos filtros
   const loadReportData = () => {
     db.transaction(tx => {
       const filters = [];
@@ -307,121 +309,167 @@ const AdminReportScreen = () => {
 
       tx.executeSql(query, filters, (_, { rows }) => {
         const data = rows._array;
-        processChartData(data); // Processar os dados para gráficos
+        processChartData(data);
       });
     });
   };
 
-  // Processar dados para gráficos
-  const processChartData = data => {
+  const processChartData = (data = []) => {
+    if (!Array.isArray(data) || data.length === 0) {
+      console.log('Nenhum dado a processar.');
+      setBarChartData([]);
+      setPieChartData([]);
+      setLineChartData([]);
+      setTotalRevenue(0);
+      return;
+    }
+  
     const serviceCount = {};
     const revenueByService = {};
+    const revenueOverTime = {};
     const barberPopularity = {};
-
+  
     let total = 0;
-
+  
     data.forEach(item => {
-      // Serviço mais pedido
-      serviceCount[item.service] = (serviceCount[item.service] || 0) + 1;
-
-      // Faturamento total por serviço
-      revenueByService[item.service] = (revenueByService[item.service] || 0) + item.price;
-
-      // Barbeiro mais popular
-      barberPopularity[item.barber] = (barberPopularity[item.barber] || 0) + 1;
-
-      // Faturamento total
-      total += item.price;
+      const price = item.price || 0; // Se `price` for null, considera 0
+      const service = item.service || 'Desconhecido'; // Opcional: lidar com serviços sem nome
+      const barber = item.barber || 'Barbeiro Desconhecido'; // Opcional
+  
+      // Contagem de serviços
+      serviceCount[service] = (serviceCount[service] || 0) + 1;
+  
+      // Receita por serviço
+      revenueByService[service] = (revenueByService[service] || 0) + price;
+  
+      // Receita ao longo do tempo
+      const monthYear = item.date.slice(0, 7);
+      revenueOverTime[monthYear] = (revenueOverTime[monthYear] || 0) + price;
+  
+      // Popularidade dos barbeiros
+      barberPopularity[barber] = (barberPopularity[barber] || 0) + 1;
+  
+      total += price;
     });
-
-    // Atualiza o estado para os gráficos
-    setBarChartData(
-      Object.entries(serviceCount).map(([key, value]) => ({
-        value,
-        label: key,
-      }))
+  
+    // Atualiza os dados dos gráficos
+    setBarChartData(Object.entries(serviceCount).map(([label, value]) => ({ label, value })));
+    setPieChartData(Object.entries(revenueByService).map(([label, value]) => ({ label, value })));
+    setLineChartData(
+      Object.entries(revenueOverTime).sort().map(([label, value]) => ({ label, value }))
     );
-
-    setPieChartData(
-      Object.entries(revenueByService).map(([key, value]) => ({
-        value,
-        label: key,
-      }))
-    );
-
     setTotalRevenue(total);
   };
+  
 
   return (
     <ScrollView style={styles.container}>
+      <Text style={styles.header}>Relatório de Faturamento</Text>
+
       {/* Filtros */}
-      <View style={styles.filters}>
-        <View style={styles.filterItem}>
-          <Text>Mês:</Text>
-          <Picker selectedValue={month} onValueChange={value => setMonth(value)}>
-            <Picker.Item label="Todos" value="Todos" />
-            {Array.from({ length: 12 }, (_, i) => {
-              const month = (i + 1).toString().padStart(2, '0');
-              return <Picker.Item key={month} label={month} value={month} />;
-            })}
-          </Picker>
-        </View>
+      <View style={styles.filtersContainer}>
+        <Picker
+          selectedValue={month}
+          onValueChange={value => setMonth(value)}
+          style={styles.picker}
+        >
+          <Picker.Item label="Todos os Meses" value="Todos" />
+          {[...Array(12)].map((_, i) => (
+            <Picker.Item
+              key={i}
+              label={new Date(0, i).toLocaleString('pt-BR', { month: 'long' })}
+              value={(i + 1).toString().padStart(2, '0')}
+            />
+          ))}
+        </Picker>
 
-        <View style={styles.filterItem}>
-          <Text>Ano:</Text>
-          <Picker selectedValue={year} onValueChange={value => setYear(value)}>
-            <Picker.Item label="Todos" value="Todos" />
-            {[...Array(5)].map((_, i) => {
-              const currentYear = new Date().getFullYear() - i;
-              return <Picker.Item key={currentYear} label={currentYear.toString()} value={currentYear.toString()} />;
-            })}
-          </Picker>
-        </View>
+        <Picker
+          selectedValue={year}
+          onValueChange={value => setYear(value)}
+          style={styles.picker}
+        >
+          <Picker.Item label="Todos os Anos" value="Todos" />
+          {[2023, 2024, 2025].map(y => (
+            <Picker.Item key={y} label={y.toString()} value={y.toString()} />
+          ))}
+        </Picker>
 
-        <View style={styles.filterItem}>
-          <Text>Barbeiro:</Text>
-          <Picker selectedValue={barber} onValueChange={value => setBarber(value)}>
-            {barbersList.map((barber, index) => (
-              <Picker.Item key={index} label={barber} value={barber} />
-            ))}
-          </Picker>
-        </View>
+        <Picker
+          selectedValue={barber}
+          onValueChange={value => setBarber(value)}
+          style={styles.picker}
+        >
+          {barbersList.map(barb => (
+            <Picker.Item key={barb} label={barb} value={barb} />
+          ))}
+        </Picker>
 
-        <View style={styles.filterItem}>
-          <Text>Serviço:</Text>
-          <Picker selectedValue={service} onValueChange={value => setService(value)}>
-            {servicesList.map((service, index) => (
-              <Picker.Item key={index} label={service} value={service} />
-            ))}
-          </Picker>
-        </View>
+        <Picker
+          selectedValue={service}
+          onValueChange={value => setService(value)}
+          style={styles.picker}
+        >
+          {servicesList.map(serv => (
+            <Picker.Item key={serv} label={serv} value={serv} />
+          ))}
+        </Picker>
       </View>
 
       {/* Gráficos */}
-      <View>
-        <Text style={styles.chartTitle}>Serviço Mais Pedido</Text>
+      <View style={styles.chartContainer}>
+        <Text style={styles.chartTitle}>Serviços Mais Populares</Text>
         <BarChart
-          data={barChartData}
-          barWidth={30}
-          spacing={10}
-          roundedTop
-          noOfSections={4}
-          maxValue={Math.max(...barChartData.map(d => d.value), 100)}
+          data={{
+            labels: barChartData.map(item => item.label),
+            datasets: [{ data: barChartData.map(item => item.value) }]
+          }}
+          width={300}
+          height={200}
+          chartConfig={{
+            backgroundColor: '#1cc910',
+            backgroundGradientFrom: '#eff3ff',
+            backgroundGradientTo: '#efefef',
+            decimalPlaces: 0,
+            color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+            style: { borderRadius: 16 }
+          }}
+          style={styles.chart}
         />
 
-        <Text style={styles.chartTitle}>Faturamento por Serviço</Text>
+        <Text style={styles.chartTitle}>Receita por Serviço</Text>
         <PieChart
-          data={pieChartData}
-          donut
-          showText
-          textColor="black"
-          radius={100}
-          innerRadius={50}
-          textSize={10}
-          textBackgroundColor="white"
+          data={pieChartData.map(item => ({
+            name: item.label,
+            population: item.value,
+            color: `#${Math.floor(Math.random() * 16777215).toString(16)}`,
+            legendFontColor: '#7F7F7F',
+            legendFontSize: 15
+          }))}
+          width={300}
+          height={200}
+          accessor="population"
+          backgroundColor="transparent"
+          paddingLeft="15"
         />
 
-        <Text style={styles.totalRevenue}>Faturamento Total: R$ {totalRevenue.toFixed(2)}</Text>
+        <Text style={styles.chartTitle}>Receita ao Longo do Tempo</Text>
+        <LineChart
+          data={{
+            labels: lineChartData.map(item => item.label),
+            datasets: [{ data: lineChartData.map(item => item.value) }]
+          }}
+          width={300}
+          height={200}
+          chartConfig={{
+            backgroundColor: '#022173',
+            backgroundGradientFrom: '#1a2a6c',
+            backgroundGradientTo: '#b21f1f',
+            decimalPlaces: 0,
+            color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
+            style: { borderRadius: 16 }
+          }}
+          style={styles.chart}
+        />
       </View>
     </ScrollView>
   );
@@ -450,6 +498,7 @@ function UserHomeScreen() {
 
   const setupDatabase = () => {
     db.transaction(tx => {
+      // Criar a tabela se ela não existir
       tx.executeSql(
         `CREATE TABLE IF NOT EXISTS appointments (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -461,16 +510,28 @@ function UserHomeScreen() {
           period TEXT,
           service TEXT,
           barber TEXT,
-          price REAL,
+          price REAL DEFAULT 0, -- Define um valor padrão para 'price'
           concluido INTEGER DEFAULT 0
         );`,
         [],
-        () => console.log("Tabela 'appointments' criada com sucesso."),
+        () => {
+          console.log("Tabela 'appointments' criada com sucesso.");
+  
+          // Após garantir que a tabela foi criada, atualize valores 'NULL'
+          db.transaction(tx => {
+            tx.executeSql(
+              'UPDATE appointments SET price = 0 WHERE price IS NULL;',
+              [],
+              () => console.log("Valores 'NULL' corrigidos para 0 no campo 'price'."),
+              (_, error) => console.error("Erro ao corrigir valores 'NULL':", error)
+            );
+          });
+        },
         (_, error) => console.error("Erro ao criar a tabela:", error)
       );
     });
   };
-
+  
   const fetchAppointments = () => {
     db.transaction(tx => {
       tx.executeSql(
@@ -1030,25 +1091,11 @@ const styles = StyleSheet.create({
     textAlign: 'center', // Centraliza o texto
     marginBottom: 5, // Adiciona um espaço abaixo do texto
   },
-  filters: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: 20,
-  },
-  filterItem: {
-    width: '50%',
-    padding: 10,
-  },
-  chartTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginTop: 20,
-    textAlign: 'center',
-  },
-  totalRevenue: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginTop: 10,
-  },
+
+  header: { fontSize: 24, fontWeight: 'bold', marginBottom: 20, textAlign: 'center' },
+  filtersContainer: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 20 },
+  chartContainer: { alignItems: 'center', marginBottom: 20 },
+  chartTitle: { fontSize: 18, fontWeight: 'bold', marginVertical: 10 },
+  chart: { marginVertical: 8, borderRadius: 16 }
+
 });
